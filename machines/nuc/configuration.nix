@@ -2,7 +2,7 @@
 # your system.  Help is available in the configuration.nix(5) man page
 # and in the NixOS manual (accessible by running ‘nixos-help’).
 
-{ config, pkgs, callPackage, ... }:
+{ config, lib, pkgs, callPackage, ... }:
 
 {
   imports =
@@ -16,7 +16,6 @@
     systemd-boot.enable = true;
   efi = {
     canTouchEfiVariables = true;
-    efiSysMountPoint = "/boot";
   };
 };
 
@@ -24,22 +23,23 @@
   #boot.kernelParams = [
   #      "memtest=1"
   #];
-  #boot.tmpOnTmpfs = true;
-  #systemd.mounts = [{
-  #  where = "/tmp";
-  #  what = "tmpfs";
-  #  options = "1777,strictatime,nosuid,nodev,size=20%";
-  #}];
+  boot.tmpOnTmpfs = true;
+  #systemd.additionalUpstreamSystemUnits = [ "tmp.mount" ];
+  systemd.mounts = [{
+    where = "/tmp";
+    what = "tmpfs";
+    type = "tmpfs";
+    options = "mode=1777,strictatime,rw,nosuid,nodev,size=20%";
+  }];
 
   networking.hostName = "nuc"; # Define your hostname.
-  #networking.wireless.enable = true;  # Enables wireless support via wpa_supplicant.
-  #networking.wireless.networks.Bubble.pskRaw = "b1933397621e60f4b436ac4bd75e83d738cd05804e1d729999e9a189dafa1fa5";
   # The global useDHCP flag is deprecated, therefore explicitly set to false here.
   # Per-interface useDHCP will be mandatory in the future, so this generated config
   # replicates the default behaviour.
   networking.useDHCP = false;
   networking.interfaces.eno1.useDHCP = true;
   networking.interfaces.wlp0s20f3.useDHCP = true;
+  powerManagement.enable = false;
 
   # Select internationalisation properties.
   # i18n.defaultLocale = "en_US.UTF-8";
@@ -58,8 +58,10 @@
     dates = "weekly";
     options = "--delete-older-than 5d";
   }; 
+
   location.latitude = 59.3293;
   location.longitude = 18.0686;
+
   nixpkgs.config.allowUnfree = true;
   environment.pathsToLink = [ "/libexec" ]; # links /libexec from derivations to /run/current-system/sw 
   environment.systemPackages = with pkgs; [
@@ -75,7 +77,6 @@
     firefox 
     docker 
     tmux 
-    slack 
     teams 
     alacritty 
     killall
@@ -85,7 +86,21 @@
     pavucontrol
     jq
     imv
+    slack
   ];
+
+  nixpkgs.overlays = [ (self: super: {
+    slack = super.slack.overrideAttrs (old: {
+      installPhase = old.installPhase + ''
+        rm $out/bin/slack
+        makeWrapper $out/lib/slack/slack $out/bin/slack \
+          --prefix XDG_DATA_DIRS : $GSETTINGS_SCHEMAS_PATH \
+          --prefix PATH : ${lib.makeBinPath [pkgs.xdg-utils]} \
+          --add-flags "--ozone-platform=wayland --enable-features=UseOzonePlatform,WebRTCPipeWireCapturer"
+        '';
+    });
+  }) ];
+
   services.avahi = {
     enable = true;
     nssmdns = true;
@@ -96,19 +111,25 @@
     };
   };
   services.fstrim.enable = true;
-
+  services.ratbagd.enable = true;
+  services.pipewire = {
+    enable = true;
+    alsa.enable = true;
+    alsa.support32Bit = true;
+    pulse.enable = true;
+  };
   programs.zsh.enable = true;
   programs.fish.enable = true;
   fonts = {
     fontDir.enable = true;
     fonts = with pkgs; [
       (nerdfonts.override { fonts = [ "Meslo" ]; })
-      corefonts		  # Microsoft free fonts
-      fira	      	  # Monospace
-      inconsolata     	  # Monospace
+      corefonts		 # Microsoft free fonts
+      fira	     	 # Monospace
+      inconsolata     	 # Monospace
       powerline-fonts
       ubuntu_font_family
-      unifont		  # International languages
+      unifont		 # International languages
       source-code-pro
     ];
   };
@@ -129,8 +150,8 @@
   networking.networkmanager.enable = true;
   # Enable sound.
   sound.enable = true;
-  hardware.pulseaudio.enable = true;
-  hardware.opengl.enable = true;
+  hardware.pulseaudio.enable = false;
+  #hardware.opengl.enable = true;
   nixpkgs.config.packageOverrides = pkgs: {
     vaapiIntel = pkgs.vaapiIntel.override { enableHybridCodec = true; };
   };
@@ -144,17 +165,11 @@
     ];
   };
 
-  # Enable Oh-my-zsh
-  #programs.zsh.ohMyZsh = {
-  #  enable = true;
-  #  plugins = [ "git" "sudo" "docker" ];
-  #};
-
   # Define a user account. Don't forget to set a password with ‘passwd’.
   users.users.rickard = {
     isNormalUser = true;
     extraGroups = [ "wheel" "docker" "networkmanager" ]; # Enable ‘sudo’ for the user.
-    shell = pkgs.zsh;
+    shell = pkgs.fish;
   };
 
   security.sudo.enable = true;
