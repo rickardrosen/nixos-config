@@ -8,7 +8,6 @@
   imports =
     [ # Include the results of the hardware scan.
       ./hardware-configuration.nix
-      ./sway.nix
     ];
 
   # Use the systemd-boot EFI boot loader.
@@ -101,6 +100,37 @@
     });
   }) ];
 
+  xdg.portal = {
+    enable = true;
+    gtkUsePortal = true;
+    extraPortals = with pkgs; [
+      xdg-desktop-portal-wlr
+      xdg-desktop-portal-gtk
+    ];
+  };
+  programs.sway = {
+    enable = true;
+    extraPackages = with pkgs; [
+      autotiling
+      flashfocus
+      python3
+      grim
+      slurp
+      sway-contrib.grimshot
+      sway-contrib.inactive-windows-transparency
+      #sway-unwrapped
+      swaybg
+      wofi
+      wl-clipboard
+      dmenu
+      swaylock
+      swayidle
+      waybar
+      mako
+    ];
+  };
+  programs.waybar.enable = true;
+
   services.avahi = {
     enable = true;
     nssmdns = true;
@@ -124,12 +154,12 @@
     fontDir.enable = true;
     fonts = with pkgs; [
       (nerdfonts.override { fonts = [ "Meslo" ]; })
-      corefonts		 # Microsoft free fonts
-      fira	     	 # Monospace
-      inconsolata     	 # Monospace
+      corefonts		  # Microsoft free fonts
+      fira	      	  # Monospace
+      inconsolata     	  # Monospace
       powerline-fonts
       ubuntu_font_family
-      unifont		 # International languages
+      unifont		  # International languages
       source-code-pro
     ];
   };
