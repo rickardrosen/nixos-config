@@ -7,16 +7,17 @@
 {
   imports =
     [ # Include the results of the hardware scan.
+      <nixos-hardware/intel/nuc/8i7beh>
       ./hardware-configuration.nix
     ];
 
   # Use the systemd-boot EFI boot loader.
   boot.loader = {
     systemd-boot.enable = true;
-  efi = {
-    canTouchEfiVariables = true;
+    efi = {
+      canTouchEfiVariables = true;
+    };
   };
-};
 
   boot.kernelPackages = pkgs.linuxPackages_latest;
   #boot.kernelParams = [
@@ -45,7 +46,7 @@
   console = {
     font = "Lat2-Terminus16";
     keyMap = "sv-latin1";
-   };
+  };
 
   # Set your time zone.
   time.timeZone = "Europe/Stockholm";
@@ -56,7 +57,7 @@
     automatic = true;
     dates = "weekly";
     options = "--delete-older-than 5d";
-  }; 
+  };
 
   location.latitude = 59.3293;
   location.longitude = 18.0686;
@@ -65,19 +66,19 @@
   environment.pathsToLink = [ "/libexec" ]; # links /libexec from derivations to /run/current-system/sw 
   environment.systemPackages = with pkgs; [
     wget
-    unzip 
+    unzip
     chromium
-    vanilla-dmz 
-    neovim 
-    git 
-    fzf 
-    ripgrep 
-    zsh 
-    firefox 
-    docker 
-    tmux 
-    teams 
-    alacritty 
+    vanilla-dmz
+    neovim
+    git
+    fzf
+    ripgrep
+    zsh
+    firefox
+    docker
+    tmux
+    teams
+    alacritty
     killall
     insomnia
     kitty
@@ -86,9 +87,18 @@
     jq
     imv
     slack
+    copyq
+    flameshot
+    nodejs
+    nodePackages.typescript
+    nodePackages.typescript-language-server
+    nodePackages.diagnostic-languageserver
+    (python3.withPackages(ps: with ps; [ i3ipc ]))
+    terraform-ls
   ];
 
-  nixpkgs.overlays = [ (self: super: {
+  nixpkgs.overlays = [ 
+  (self: super: {
     slack = super.slack.overrideAttrs (old: {
       installPhase = old.installPhase + ''
         rm $out/bin/slack
@@ -98,7 +108,14 @@
           --add-flags "--ozone-platform=wayland --enable-features=UseOzonePlatform,WebRTCPipeWireCapturer"
         '';
     });
-  }) ];
+  })
+  (self: super: {
+   chromium = super.chromium.override {
+     commandLineArgs =
+       "--enable-features=UseOzonePlatform --ozone-platform=wayland";
+     };
+   })
+  ];
 
   xdg.portal = {
     enable = true;
@@ -113,7 +130,6 @@
     extraPackages = with pkgs; [
       autotiling
       flashfocus
-      python3
       grim
       slurp
       sway-contrib.grimshot
@@ -127,10 +143,13 @@
       swayidle
       waybar
       mako
+      wlsunset
+      swappy
+      pngquant
     ];
   };
   programs.waybar.enable = true;
-
+  
   services.avahi = {
     enable = true;
     nssmdns = true;
@@ -153,7 +172,7 @@
   fonts = {
     fontDir.enable = true;
     fonts = with pkgs; [
-      (nerdfonts.override { fonts = [ "Meslo" ]; })
+      (nerdfonts.override { fonts = [ "Meslo" "Hack" ]; })
       corefonts		  # Microsoft free fonts
       fira	      	  # Monospace
       inconsolata     	  # Monospace
@@ -161,6 +180,7 @@
       ubuntu_font_family
       unifont		  # International languages
       source-code-pro
+      font-awesome
     ];
   };
 
@@ -198,7 +218,7 @@
   # Define a user account. Don't forget to set a password with ‘passwd’.
   users.users.rickard = {
     isNormalUser = true;
-    extraGroups = [ "wheel" "docker" "networkmanager" ]; # Enable ‘sudo’ for the user.
+    extraGroups = [ "wheel" "docker" "networkmanager" "video" ]; # Enable ‘sudo’ for the user.
     shell = pkgs.fish;
   };
 
@@ -216,3 +236,4 @@
   system.stateVersion = "20.03"; # Did you read the comment?
 
 }
+
