@@ -4,6 +4,22 @@
 
 { config, lib, pkgs, callPackage, ... }:
 
+#let
+#     old = import (builtins.fetchGit {
+#         # Descriptive name to make the store path easier to identify                
+#         name = "chromium99";                                                 
+#         url = "https://github.com/NixOS/nixpkgs/";                       
+#         ref = "refs/heads/nixos-unstable";                     
+#         rev = "89704501dc1ef3f422c2560ee71430d75d1b15fd";                                           
+#     }) {};                                                                           
+#in
+
+#let
+#  masterTarball =
+#    fetchTarball
+#      https://github.com/NixOS/nixpkgs/archive/refs/heads/master.tar.gz;
+#in
+
 {
   imports =
     [ # Include the results of the hardware scan.
@@ -29,8 +45,14 @@
     where = "/tmp";
     what = "tmpfs";
     type = "tmpfs";
-    options = "mode=1777,strictatime,rw,nosuid,nodev,size=20%";
+    options = "mode=1777,strictatime,rw,nosuid,nodev";
   }];
+
+  hardware.bluetooth.settings = {
+    General = {
+      Enable = "Source,Sink,Media,Socket";
+    };
+  };
 
   networking.hostName = "nuc"; # Define your hostname.
   # The global useDHCP flag is deprecated, therefore explicitly set to false here.
@@ -61,13 +83,23 @@
 
   location.latitude = 59.3293;
   location.longitude = 18.0686;
+  nixpkgs.config = {
+    allowUnfree = true;
+    packageOverrides = pkgs: {
+      vaapiIntel = pkgs.vaapiIntel.override { enableHybridCodec = true; };
+      unstable = import <nixpkgs-unstable> {
+        config = config.nixpkgs.config;
+      };
+    };
+  };
 
-  nixpkgs.config.allowUnfree = true;
   environment.pathsToLink = [ "/libexec" ]; # links /libexec from derivations to /run/current-system/sw 
   environment.systemPackages = with pkgs; [
+    gcc
     wget
     unzip
-    chromium
+    #old.chromium
+    unstable.chromium
     vanilla-dmz
     neovim
     git
@@ -95,7 +127,10 @@
     nodePackages.diagnostic-languageserver
     (python3.withPackages(ps: with ps; [ i3ipc ]))
     terraform-ls
+    go
   ];
+
+  #nixpkgs.config.chromium.commandLineArgs = "---ozone-platform=wayland --enable-features=UseOzonePlatform,WebRTCPipeWireCapturer,VaapiVideoDecoder,VaapiVideoEncoder";
 
   nixpkgs.overlays = [ 
   (self: super: {
@@ -110,9 +145,9 @@
     });
   })
   (self: super: {
-   chromium = super.chromium.override {
+   unstable.chromium = super.unstable.chromium.override {
      commandLineArgs =
-       "--enable-features=UseOzonePlatform --ozone-platform=wayland";
+       "--enable-features=UseOzonePlatform,WebRTCPipeWireCapturer,VaapiVideoDecoder,VaapiVideoEncoder --ozone-platform=wayland";
      };
    })
   ];
@@ -149,7 +184,7 @@
     ];
   };
   programs.waybar.enable = true;
-  
+
   services.avahi = {
     enable = true;
     nssmdns = true;
@@ -202,9 +237,6 @@
   sound.enable = true;
   hardware.pulseaudio.enable = false;
   #hardware.opengl.enable = true;
-  nixpkgs.config.packageOverrides = pkgs: {
-    vaapiIntel = pkgs.vaapiIntel.override { enableHybridCodec = true; };
-  };
   hardware.opengl = {
     enable = true;
     extraPackages = with pkgs; [
@@ -219,7 +251,7 @@
   users.users.rickard = {
     isNormalUser = true;
     extraGroups = [ "wheel" "docker" "networkmanager" "video" ]; # Enable ‘sudo’ for the user.
-    shell = pkgs.fish;
+    shell = pkgs.zsh;
   };
 
   security.sudo.enable = true;
