@@ -87,9 +87,9 @@
     allowUnfree = true;
     packageOverrides = pkgs: {
       vaapiIntel = pkgs.vaapiIntel.override { enableHybridCodec = true; };
-      unstable = import <nixpkgs-unstable> {
-        config = config.nixpkgs.config;
-      };
+      #unstable = import <nixpkgs-unstable> {
+      #  config = config.nixpkgs.config;
+      #};
     };
   };
 
@@ -99,7 +99,7 @@
     wget
     unzip
     #old.chromium
-    unstable.chromium
+    chromium
     vanilla-dmz
     neovim
     git
@@ -109,7 +109,6 @@
     firefox
     docker
     tmux
-    teams
     alacritty
     killall
     insomnia
@@ -127,38 +126,47 @@
     nodePackages.diagnostic-languageserver
     (python3.withPackages(ps: with ps; [ i3ipc ]))
     terraform-ls
-    go
+    #go-1.18.1
   ];
 
   #nixpkgs.config.chromium.commandLineArgs = "---ozone-platform=wayland --enable-features=UseOzonePlatform,WebRTCPipeWireCapturer,VaapiVideoDecoder,VaapiVideoEncoder";
 
-  nixpkgs.overlays = [ 
+  nixpkgs.overlays = [
   (self: super: {
-    slack = super.slack.overrideAttrs (old: {
-      installPhase = old.installPhase + ''
-        rm $out/bin/slack
-        makeWrapper $out/lib/slack/slack $out/bin/slack \
-          --prefix XDG_DATA_DIRS : $GSETTINGS_SCHEMAS_PATH \
-          --prefix PATH : ${lib.makeBinPath [pkgs.xdg-utils]} \
-          --add-flags "--ozone-platform=wayland --enable-features=UseOzonePlatform,WebRTCPipeWireCapturer"
-        '';
-    });
-  })
-  (self: super: {
-   unstable.chromium = super.unstable.chromium.override {
+   chromium = super.chromium.override {
      commandLineArgs =
        "--enable-features=UseOzonePlatform,WebRTCPipeWireCapturer,VaapiVideoDecoder,VaapiVideoEncoder --ozone-platform=wayland";
      };
    })
+  #(self: super: {
+  #  insomnia = super.insomnia.overrideAttrs (old: {
+  #    preFixup = old.preFixup + ''
+  #      rm $out/bin/insomnia
+  #      wrapProgram $out/bin/insomnia \
+  #        --prefix LD_LIBRARY_PATH : ${runtimeLibs} \
+  #        --add-flags "--ozone-platform=wayland --enable-features=UseOzonePlatform,WebRTCPipeWireCapturer"
+  #      '';
+  #  });
+  #})
   ];
 
+  services.dbus.enable = true;
   xdg.portal = {
     enable = true;
-    gtkUsePortal = true;
+    wlr = {
+      enable = true;
+      settings = {
+        screencast = {
+          max_fps = 30; 
+          chooser_type = "simple";
+          chooser_cmd = "${pkgs.slurp}/bin/slurp -f %o -or";
+        };
+      };
+    };
     extraPortals = with pkgs; [
       xdg-desktop-portal-wlr
-      xdg-desktop-portal-gtk
     ];
+    #gtkUsePortal = true;
   };
   programs.sway = {
     enable = true;
@@ -175,12 +183,16 @@
       wl-clipboard
       dmenu
       swaylock
+      swaylock-fancy
       swayidle
+      swaycwd
       waybar
       mako
       wlsunset
       swappy
       pngquant
+      clipman
+      xdg-utils
     ];
   };
   programs.waybar.enable = true;
