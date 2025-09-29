@@ -67,7 +67,7 @@
           HandleLidSwitch = "suspend";
           HandleLidSwitchExternalPower = "lock";
         };
-      }
+      };
     };
     pipewire = {
       enable = true;
@@ -162,9 +162,9 @@
     hyprshot
     hyprpanel
     hyprsunset
-    #sunsetr
+    sunsetr
     brightnessctl
-    #hyprshell
+    hyprshell
     wl-clipboard
     cliphist
   ];
