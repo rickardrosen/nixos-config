@@ -59,6 +59,17 @@
   # Enable sound.
   # services.pulseaudio.enable = true;
   # OR
+  # Enable common container config files in /etc/containers
+  virtualisation.containers.enable = true;
+  virtualisation = {
+    podman = {
+      enable = true;
+      # Create a `docker` alias for podman, to use it as a drop-in replacement
+      dockerCompat = true;
+      # Required for containers under podman-compose to be able to talk to each other.
+      defaultNetwork.settings.dns_enabled = true;
+    };
+  };
   services = {
     logind = {
       settings = {
@@ -116,7 +127,7 @@
   # Define a user account. Don't forget to set a password with ‘passwd’.
   users.users.rickard = {
     isNormalUser = true;
-    extraGroups = [ "networkmanager" "wheel" ]; # Enable ‘sudo’ for the user.
+    extraGroups = [ "podman" "networkmanager" "wheel" ]; # Enable ‘sudo’ for the user.
     createHome = true;
     shell = pkgs.fish;
   };
@@ -167,6 +178,7 @@
     hyprshell
     wl-clipboard
     cliphist
+    nodejs
   ];
 
   fonts.packages = with pkgs; [
