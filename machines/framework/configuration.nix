@@ -2,7 +2,7 @@
 # your system. Help is available in the configuration.nix(5) man page, on
 # https://search.nixos.org/options and in the NixOS manual (`nixos-help`).
 
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, inputs, ... }:
 
 {
   imports =
@@ -111,6 +111,16 @@
     };
   };
 
+  xdg.portal = {
+    enable = true;
+    xdgOpenUsePortal = true;
+    extraPortals = with pkgs; [
+      xdg-desktop-portal-gtk
+      xdg-desktop-portal-gnome
+      xdg-desktop-portal-wlr
+    ];
+  };
+
   hardware.bluetooth = {
     enable = true;
     powerOnBoot = true;
@@ -136,9 +146,10 @@
   programs = {
     hyprland.enable = true;
     hyprlock.enable = true;
-    waybar.enable = false;
+    waybar.enable = true;
     fish.enable = true;
     starship.enable = true;
+    niri.enable = true;
   }; 
   # List packages installed in system profile.
   # You can use https://search.nixos.org/ to find more packages (and options).
@@ -171,6 +182,7 @@
     tpm2-tss
     starship
     hyprshot
+    hyprpaper
     hyprpanel
     hyprsunset
     sunsetr
@@ -179,6 +191,14 @@
     wl-clipboard
     cliphist
     nodejs
+    devenv
+    inputs.swww.packages.${pkgs.system}.swww
+    ghostty
+    xwayland-satellite
+    niriswitcher
+    pwvucontrol
+    pw-volume
+    #inputs.ghostty.packages.${pkgs.system}.default
   ];
 
   fonts.packages = with pkgs; [
@@ -207,8 +227,13 @@
   # (/run/current-system/configuration.nix). This is useful in case you
   # accidentally delete configuration.nix.
   # system.copySystemConfiguration = true;
-  nix.settings.experimental-features = [ "nix-command" "flakes" ]; 
-  nix.gc = { automatic = true; dates = "weekly"; options = "--delete-older-than 7d"; };
+  nix = {
+    settings = {
+      trusted-users = [ "root" "rickard" ];
+      experimental-features = [ "nix-command" "flakes" ]; 
+    };
+    gc = { automatic = true; dates = "weekly"; options = "--delete-older-than 7d"; };
+  };
   nixpkgs.config.allowUnfree = true;
   # This option defines the first version of NixOS you have installed on this particular machine,
   # and is used to maintain compatibility with application data (e.g. databases) created on older NixOS versions.
@@ -228,6 +253,10 @@
   #
   # For more information, see `man configuration.nix` or https://nixos.org/manual/nixos/stable/options#opt-system.stateVersion .
   system.stateVersion = "25.05"; # Did you read the comment?
-
+  system.autoUpgrade = {
+    enable = true;
+    flake = "/etc/nixos#framework";
+    flags = [ "--update-input" "nixpkgs" ];
+  };
 }
 
