@@ -47,7 +47,7 @@
   # Enable the GNOME Desktop Environment.
   # services.xserver.displayManager.gdm.enable = true;
   # services.xserver.desktopManager.gnome.enable = true;
-  
+
 
   # Configure keymap in X11
   # services.xserver.xkb.layout = "us";
@@ -57,7 +57,8 @@
   # services.printing.enable = true;
 
   # Enable sound.
-  # services.pulseaudio.enable = true;
+  services.pulseaudio.enable = false;
+  security.rtkit.enable = true;
   # OR
   # Enable common container config files in /etc/containers
   virtualisation.containers.enable = true;
@@ -71,6 +72,12 @@
     };
   };
   services = {
+    #udev.packages = [ pkgs.yubikey-personalization ];
+    pcscd.enable = true;
+    udev.extraRules = ''
+      # Lock screen when YubiKey is removed
+      ACTION=="remove", ENV{ID_VENDOR_ID}=="1050", ENV{ID_MODEL_ID}=="0407", RUN+="${pkgs.systemd}/bin/loginctl lock-sessions"
+    '';
     logind = {
       settings = {
         Login = {
@@ -88,20 +95,22 @@
         support32Bit = true;
       };
     };
-    #auto-cpufreq = {
-      #enable = true;
-      #settings = {
-        #battery = {
-          #governor = "powersave";
-          #turbo = "auto";
-        #};
-        #charger = {
-          #governor = "performance";
-          #turbo = "auto";
-        #};
-      #};
-    #};
-    gnome.gnome-keyring.enable = true;   
+    # Disable power-profiles-daemon (pulled in by COSMIC) in favor of auto-cpufreq
+    power-profiles-daemon.enable = false;
+    auto-cpufreq = {
+      enable = true;
+      settings = {
+        battery = {
+          governor = "powersave";
+          turbo = "auto";
+        };
+        charger = {
+          governor = "performance";
+          turbo = "auto";
+        };
+      };
+    };
+    gnome.gnome-keyring.enable = true;
     displayManager.ly.enable = true;
     desktopManager = {
       cosmic = {
@@ -119,6 +128,11 @@
       xdg-desktop-portal-gnome
       xdg-desktop-portal-wlr
     ];
+    config = {
+      niri = {
+        "org.freedesktop.impl.portal.FileChooser" = "cosmic-files";
+      };
+    };
   };
 
   hardware.bluetooth = {
@@ -128,16 +142,38 @@
 
   security =  {
     polkit.enable = true;
-    pam.services.swaylock = {};
+    pam = {
+      services = {
+        swaylock = {
+          u2fAuth = true;  # Enable U2F touch to unlock
+        };
+        ly = {
+          unixAuth = lib.mkForce false;  # Disable password authentication
+          u2fAuth = true;    # Enable U2F touch authentication
+        };
+        sudo = {
+          u2fAuth = true;  # Enable U2F touch for sudo
+        };
+      };
+      p11.enable = true;  # Keep smart card support (PIN-based)
+      u2f = {
+        enable = true;
+        control = "sufficient";  # U2F or smart card works
+        settings = {
+          cue = true;  # Prompt to touch the YubiKey
+          interactive = true;  # Wait for user before checking for authenticator
+        };
+      };
+    };
     tpm2.enable = true;
   };
   # Enable touchpad support (enabled default in most desktopManager).
   # services.libinput.enable = true;
 
-  # Define a user account. Don't forget to set a password with ‘passwd’.
+  # Define a user account. Don't forget to set a password with 'passwd'.
   users.users.rickard = {
     isNormalUser = true;
-    extraGroups = [ "podman" "networkmanager" "wheel" ]; # Enable ‘sudo’ for the user.
+    extraGroups = [ "podman" "networkmanager" "wheel" ]; # Enable 'sudo' for the user.
     createHome = true;
     shell = pkgs.fish;
   };
@@ -150,17 +186,18 @@
     fish.enable = true;
     starship.enable = true;
     niri.enable = true;
-  }; 
+  };
   # List packages installed in system profile.
   # You can use https://search.nixos.org/ to find more packages (and options).
   environment.systemPackages = with pkgs; [
     helix # Do not forget to add an editor to edit configuration.nix! The Nano editor is also installed by default.
     git
+    jq
     kitty
     google-chrome
     fuzzel
     swaylock
-    mako
+    swaynotificationcenter
     swayidle
     wlogout
     fishPlugins.done
@@ -198,12 +235,29 @@
     niriswitcher
     pwvucontrol
     pw-volume
+    yubioath-flutter
+    opensc
+    yubico-piv-tool
+    yubikey-manager
     #inputs.ghostty.packages.${pkgs.system}.default
   ];
 
   fonts.packages = with pkgs; [
     nerd-fonts.jetbrains-mono
   ];
+
+  # Fix headphone jack audio - disable auto-mute
+  systemd.services.disable-audio-auto-mute = {
+    description = "Disable audio auto-mute for headphone jack";
+    wantedBy = [ "sound.target" ];
+    after = [ "sound.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      ExecStart = "${pkgs.alsa-utils}/bin/amixer -c 1 sset 'Auto-Mute Mode' 'Disabled'";
+    };
+  };
+
   # Some programs need SUID wrappers, can be configured further or are
   # started in user sessions.
   # programs.mtr.enable = true;
@@ -230,7 +284,7 @@
   nix = {
     settings = {
       trusted-users = [ "root" "rickard" ];
-      experimental-features = [ "nix-command" "flakes" ]; 
+      experimental-features = [ "nix-command" "flakes" ];
     };
     gc = { automatic = true; dates = "weekly"; options = "--delete-older-than 7d"; };
   };
