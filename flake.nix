@@ -8,10 +8,10 @@
     nixos-hardware.url = "github:NixOS/nixos-hardware/master";
 
     # Window manager / shell tools
-    swww = {
-      url = "github:LGFae/swww";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
+    # swww = {
+    #   url = "github:LGFae/swww";
+    #   inputs.nixpkgs.follows = "nixpkgs";
+    # };
 
     # Astal libraries (includes niri support not in nixpkgs yet)
     astal = {
@@ -35,7 +35,7 @@
     #ghostty.url = "github:ghostty-org/ghostty";
   };
 
-  outputs = { self, nixpkgs, nixos-hardware, astal, ags, delta-shell, swww, ... }@inputs:
+  outputs = { self, nixpkgs, nixos-hardware, astal, ags, delta-shell, ... }@inputs:
     let
       system = "x86_64-linux";
 
@@ -49,20 +49,14 @@
         };
       };
 
-      # Common pkgs with overlays
-      mkPkgs = system: import nixpkgs {
-        inherit system;
-        config.allowUnfree = true;
-        overlays = [ deltaShellOverlay ];
-      };
-
-      pkgs = mkPkgs system;
-
     in
     {
       # Package outputs (can be built with: nix build .#delta-shell)
       packages.${system} = {
-        delta-shell = pkgs.delta-shell;
+        delta-shell = (import nixpkgs {
+          inherit system;
+          overlays = [ deltaShellOverlay ];
+        }).delta-shell;
       };
 
       # NixOS configurations
@@ -71,11 +65,13 @@
         # Framework laptop configuration
         framework = nixpkgs.lib.nixosSystem {
           inherit system;
-          specialArgs = {
-            inherit inputs;
-            pkgs = mkPkgs system;
-          };
+          specialArgs = { inherit inputs; };
           modules = [
+            # Apply overlays properly via nixpkgs module
+            {
+              nixpkgs.overlays = [ deltaShellOverlay ];
+              nixpkgs.config.allowUnfree = true;
+            }
             ./machines/framework/configuration.nix
           ];
         };

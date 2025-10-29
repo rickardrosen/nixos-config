@@ -246,7 +246,7 @@
     cliphist
     nodejs
     devenv
-    inputs.swww.packages.${pkgs.system}.swww
+    # inputs.swww.packages.${pkgs.system}.swww  # Commented out - not using swww
     ghostty
     xwayland-satellite
     niriswitcher
