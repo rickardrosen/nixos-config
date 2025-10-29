@@ -17,6 +17,16 @@
   # Use latest kernel.
   boot.kernelPackages = pkgs.linuxPackages_latest;
 
+  # Hibernation support
+  boot.resumeDevice = "/dev/disk/by-uuid/9152d066-aff6-490f-b831-d727c26b82aa";
+  boot.kernelParams = [ "resume_offset=5889077" ];
+
+  # Swapfile configuration for hibernation (96GB for full RAM)
+  swapDevices = [{
+    device = "/swap/swapfile";
+    size = 96 * 1024; # 96GB in MB
+  }];
+
   networking.hostName = "framework"; # Define your hostname.
   # Pick only one of the below networking options.
   # networking.wireless.enable = true;  # Enables wireless support via wpa_supplicant.
@@ -94,6 +104,8 @@
         enable = true;
         support32Bit = true;
       };
+      # Enable WirePlumber for session management
+      wireplumber.enable = true;
     };
     # Disable power-profiles-daemon (pulled in by COSMIC) in favor of auto-cpufreq
     power-profiles-daemon.enable = false;
@@ -131,6 +143,8 @@
     config = {
       niri = {
         "org.freedesktop.impl.portal.FileChooser" = "cosmic-files";
+        "org.freedesktop.impl.portal.ScreenCast" = "gnome";
+        "org.freedesktop.impl.portal.Screenshot" = "gnome";
       };
     };
   };
@@ -145,14 +159,16 @@
     pam = {
       services = {
         swaylock = {
-          u2fAuth = true;  # Enable U2F touch to unlock
+          u2fAuth = false;  # Disable U2F - use smart card PIN for security
+          # Smart card (p11) authentication will be used (PIN-based)
         };
         ly = {
           unixAuth = lib.mkForce false;  # Disable password authentication
-          u2fAuth = true;    # Enable U2F touch authentication
+          u2fAuth = false;   # Disable U2F - use smart card PIN instead
+          # Smart card (p11) authentication will be used (PIN-based)
         };
         sudo = {
-          u2fAuth = true;  # Enable U2F touch for sudo
+          u2fAuth = true;  # Enable U2F touch for sudo (convenience)
         };
       };
       p11.enable = true;  # Keep smart card support (PIN-based)
@@ -212,6 +228,7 @@
     pamixer # Command-line mixer for PulseAudio
     bluez # Bluetooth support
     bluez-tools # Bluetooth tools
+    bluetuith # Modern TUI Bluetooth manager
     code-cursor
     inotify-tools
     psmisc
@@ -239,6 +256,9 @@
     opensc
     yubico-piv-tool
     yubikey-manager
+    gcalcli # Google Calendar CLI
+    libnotify # Desktop notifications (provides notify-send)
+    delta-shell # AGS v3 desktop shell
     #inputs.ghostty.packages.${pkgs.system}.default
   ];
 
@@ -309,7 +329,7 @@
   system.stateVersion = "25.05"; # Did you read the comment?
   system.autoUpgrade = {
     enable = true;
-    flake = "/etc/nixos#framework";
+    flake = "/home/rickard/repos/rickardrosen/nixos-config#framework";
     flags = [ "--update-input" "nixpkgs" ];
   };
 }

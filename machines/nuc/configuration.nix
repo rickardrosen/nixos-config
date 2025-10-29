@@ -2,28 +2,12 @@
 # your system.  Help is available in the configuration.nix(5) man page
 # and in the NixOS manual (accessible by running ‘nixos-help’).
 
-{ config, lib, pkgs, callPackage, ... }:
-
-#let
-#     old = import (builtins.fetchGit {
-#         # Descriptive name to make the store path easier to identify                
-#         name = "chromium99";                                                 
-#         url = "https://github.com/NixOS/nixpkgs/";                       
-#         ref = "refs/heads/nixos-unstable";                     
-#         rev = "89704501dc1ef3f422c2560ee71430d75d1b15fd";                                           
-#      }) {};                                                                           
-#in
-
-#let
-#  masterTarball =
-#    fetchTarball
-#      https://github.com/NixOS/nixpkgs/archive/refs/heads/master.tar.gz;
-#in
+{ config, lib, pkgs, inputs, ... }:
 
 {
   imports =
     [ # Include the results of the hardware scan.
-      <nixos-hardware/intel/nuc/8i7beh>
+      # nixos-hardware module is imported in root flake.nix
       ./hardware-configuration.nix
     ];
 
