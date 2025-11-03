@@ -3,6 +3,7 @@
 , stdenv
 , ags
 , astal
+, astal-niri
 , src
 }:
 
@@ -21,6 +22,7 @@ stdenv.mkDerivation rec {
     gjs
     gobject-introspection
     wrapGAppsHook
+    makeWrapper
   ];
 
   buildInputs = (with pkgs; [
@@ -29,9 +31,11 @@ stdenv.mkDerivation rec {
     gtk4
     gtk-layer-shell
     gtk4-layer-shell
-    dart-sass
+    libsoup_3  # Required for HTTP requests
 
     # Optional dependencies
+    dart-sass            # For stylesheet compilation
+    gpu-screen-recorder  # For screen recording feature
     cliphist
     wl-clipboard
     brightnessctl
@@ -53,12 +57,28 @@ stdenv.mkDerivation rec {
     wireplumber
     hyprland
     river
-    # Note: astal-niri doesn't exist yet in astal flake
-    # Delta-shell should fall back to detecting niri via other means
-  ]);
+  ]) ++ [
+    # Niri support from community fork
+    astal-niri
+  ];
 
   # mesonFlags - meson already sets prefix automatically via stdenv
   # Don't set it manually to avoid conflicts
+
+  # Ensure runtime dependencies are in PATH
+  preFixup = ''
+    gappsWrapperArgs+=(
+      --prefix PATH : ${lib.makeBinPath ([
+        ags  # Required for delta-shell commands
+      ] ++ (with pkgs; [
+        dart-sass
+        gpu-screen-recorder
+        cliphist
+        wl-clipboard
+        brightnessctl
+      ]))}
+    )
+  '';
 
   meta = with lib; {
     description = "A desktop shell based on AGS v3, supports Hyprland and Niri";

@@ -19,6 +19,12 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # Astal Niri support (from community fork)
+    astal-niri = {
+      url = "github:sameoldlab/astal/feat/niri";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # AGS v3.0.0 for delta-shell
     ags = {
       url = "github:aylur/ags";
@@ -35,16 +41,22 @@
     #ghostty.url = "github:ghostty-org/ghostty";
   };
 
-  outputs = { self, nixpkgs, nixos-hardware, astal, ags, delta-shell, ... }@inputs:
+  outputs = { self, nixpkgs, nixos-hardware, astal, astal-niri, ags, delta-shell, ... }@inputs:
     let
       system = "x86_64-linux";
 
-      # Create custom package overlay for delta-shell
+      # Create custom package overlay for delta-shell and astal-niri
       deltaShellOverlay = final: prev: {
+        astal-niri = prev.callPackage ./pkgs/astal-niri {
+          src = astal-niri;
+        };
+
         delta-shell = prev.callPackage ./pkgs/delta-shell {
           inherit (ags.packages.${system}) ags;
-          # Use astal from the flake input (has niri support)
+          # Use astal from the flake input
           astal = astal.packages.${system};
+          # Add astal-niri from our package
+          astal-niri = final.astal-niri;
           src = delta-shell;
         };
       };

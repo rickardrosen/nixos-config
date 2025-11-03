@@ -42,6 +42,27 @@
         "type": "github"
       }
     },
+    "astal-niri": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1760892651,
+        "narHash": "sha256-KOYHpJIUgcEn5X0ag5EUPYERGaWBf0Wr/a9ZpxpUGYA=",
+        "owner": "sameoldlab",
+        "repo": "astal",
+        "rev": "0f318484bceee5b02327cbc6be6ea97919cda663",
+        "type": "github"
+      },
+      "original": {
+        "owner": "sameoldlab",
+        "ref": "feat/niri",
+        "repo": "astal",
+        "type": "github"
+      }
+    },
     "astal_2": {
       "inputs": {
         "nixpkgs": [
@@ -114,6 +135,7 @@
       "inputs": {
         "ags": "ags",
         "astal": "astal_2",
+        "astal-niri": "astal-niri",
         "delta-shell": "delta-shell",
         "nixos-hardware": "nixos-hardware",
         "nixpkgs": "nixpkgs"

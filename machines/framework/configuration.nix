@@ -198,7 +198,7 @@
   programs = {
     hyprland.enable = true;
     hyprlock.enable = true;
-    waybar.enable = true;
+    waybar.enable = false;
     fish.enable = true;
     starship.enable = true;
     niri.enable = true;
@@ -213,7 +213,7 @@
     google-chrome
     fuzzel
     swaylock
-    swaynotificationcenter
+    #swaynotificationcenter
     swayidle
     wlogout
     fishPlugins.done
