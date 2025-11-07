@@ -259,7 +259,9 @@
     gcalcli # Google Calendar CLI
     libnotify # Desktop notifications (provides notify-send)
     delta-shell # AGS v3 desktop shell
+    inputs.noctalia.packages.${pkgs.system}.default # Noctalia shell for niri
     #inputs.ghostty.packages.${pkgs.system}.default
+    podman-compose
   ];
 
   fonts.packages = with pkgs; [

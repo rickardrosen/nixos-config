@@ -37,11 +37,17 @@
       flake = false;
     };
 
+    # Noctalia shell for niri
+    noctalia = {
+      url = "github:noctalia-dev/noctalia-shell";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # Ghostty terminal (commented out like in framework flake)
     #ghostty.url = "github:ghostty-org/ghostty";
   };
 
-  outputs = { self, nixpkgs, nixos-hardware, astal, astal-niri, ags, delta-shell, ... }@inputs:
+  outputs = { self, nixpkgs, nixos-hardware, astal, astal-niri, ags, delta-shell, noctalia, ... }@inputs:
     let
       system = "x86_64-linux";
 
