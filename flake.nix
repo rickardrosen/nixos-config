@@ -82,11 +82,11 @@
 
         # Framework laptop configuration
         framework = nixpkgs.lib.nixosSystem {
-          inherit system;
           specialArgs = { inherit inputs; };
           modules = [
             # Apply overlays properly via nixpkgs module
             {
+              nixpkgs.hostPlatform = "x86_64-linux";
               nixpkgs.overlays = [ deltaShellOverlay ];
               nixpkgs.config.allowUnfree = true;
             }

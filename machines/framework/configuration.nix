@@ -156,31 +156,8 @@
 
   security =  {
     polkit.enable = true;
-    pam = {
-      services = {
-        swaylock = {
-          u2fAuth = false;  # Disable U2F - use smart card PIN for security
-          # Smart card (p11) authentication will be used (PIN-based)
-        };
-        ly = {
-          unixAuth = lib.mkForce false;  # Disable password authentication
-          u2fAuth = false;   # Disable U2F - use smart card PIN instead
-          # Smart card (p11) authentication will be used (PIN-based)
-        };
-        sudo = {
-          u2fAuth = true;  # Enable U2F touch for sudo (convenience)
-        };
-      };
-      p11.enable = true;  # Keep smart card support (PIN-based)
-      u2f = {
-        enable = true;
-        control = "sufficient";  # U2F or smart card works
-        settings = {
-          cue = true;  # Prompt to touch the YubiKey
-          interactive = true;  # Wait for user before checking for authenticator
-        };
-      };
-    };
+    # Using standard password authentication for login and sudo
+    # YubiKey is used for corporate resources via PKCS11/PIV
     tpm2.enable = true;
   };
   # Enable touchpad support (enabled default in most desktopManager).
@@ -246,7 +223,7 @@
     cliphist
     nodejs
     devenv
-    # inputs.swww.packages.${pkgs.system}.swww  # Commented out - not using swww
+    # inputs.swww.packages.${pkgs.stdenv.hostPlatform.system}.swww  # Commented out - not using swww
     ghostty
     xwayland-satellite
     niriswitcher
@@ -259,8 +236,8 @@
     gcalcli # Google Calendar CLI
     libnotify # Desktop notifications (provides notify-send)
     delta-shell # AGS v3 desktop shell
-    inputs.noctalia.packages.${pkgs.system}.default # Noctalia shell for niri
-    #inputs.ghostty.packages.${pkgs.system}.default
+    inputs.noctalia.packages.${pkgs.stdenv.hostPlatform.system}.default # Noctalia shell for niri
+    #inputs.ghostty.packages.${pkgs.stdenv.hostPlatform.system}.default
     podman-compose
   ];
 

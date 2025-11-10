@@ -21,7 +21,7 @@ stdenv.mkDerivation rec {
     ags
     gjs
     gobject-introspection
-    wrapGAppsHook
+    wrapGAppsHook3
     makeWrapper
   ];
 
