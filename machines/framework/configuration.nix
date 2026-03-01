@@ -218,6 +218,7 @@
     hyprsunset
     sunsetr
     brightnessctl
+    inputs.matugen.packages.${pkgs.stdenv.hostPlatform.system}.default # Material You color generation
     hyprshell
     wl-clipboard
     cliphist
@@ -235,10 +236,12 @@
     yubikey-manager
     gcalcli # Google Calendar CLI
     libnotify # Desktop notifications (provides notify-send)
-    delta-shell # AGS v3 desktop shell
     inputs.noctalia.packages.${pkgs.stdenv.hostPlatform.system}.default # Noctalia shell for niri
     #inputs.ghostty.packages.${pkgs.stdenv.hostPlatform.system}.default
     podman-compose
+    opencode
+    claude-code
+    ripgrep
   ];
 
   fonts.packages = with pkgs; [
