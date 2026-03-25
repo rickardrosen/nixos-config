@@ -184,6 +184,7 @@
   # You can use https://search.nixos.org/ to find more packages (and options).
   environment.systemPackages = with pkgs; [
     helix # Do not forget to add an editor to edit configuration.nix! The Nano editor is also installed by default.
+    fastfetch
     git
     jq
     kitty
@@ -242,6 +243,8 @@
     opencode
     claude-code
     ripgrep
+    gh
+    mcp-nixos
   ];
 
   fonts.packages = with pkgs; [
