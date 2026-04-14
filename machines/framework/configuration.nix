@@ -59,9 +59,8 @@
   # services.xserver.desktopManager.gnome.enable = true;
 
 
-  # Configure keymap in X11
-  # services.xserver.xkb.layout = "us";
-  # services.xserver.xkb.options = "eurosign:e,caps:escape";
+  # Configure keymap in X11/Wayland
+  services.xserver.xkb.layout = "se";
 
   # Enable CUPS to print documents.
   # services.printing.enable = true;
@@ -314,4 +313,3 @@
   system.stateVersion = "25.05"; # Did you read the comment?
   system.autoUpgrade.enable = false;
 }
-
