@@ -4,6 +4,11 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
+    microvm = {
+      url = "github:microvm-nix/microvm.nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # Hardware configurations
     nixos-hardware.url = "github:NixOS/nixos-hardware/master";
 
@@ -70,6 +75,7 @@
               nixpkgs.hostPlatform = "x86_64-linux";
               nixpkgs.config.allowUnfree = true;
             }
+            inputs.microvm.nixosModules.host
             ./machines/framework/configuration.nix
           ];
         };

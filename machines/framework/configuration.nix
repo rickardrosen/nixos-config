@@ -4,10 +4,24 @@
 
 { config, lib, pkgs, inputs, ... }:
 
+let
+  ghosttyWithSimpleIme = pkgs.symlinkJoin {
+    name = "ghostty-with-simple-ime";
+    paths = [ pkgs.ghostty ];
+    nativeBuildInputs = [ pkgs.makeWrapper ];
+    postBuild = ''
+      rm "$out/bin/ghostty"
+      makeWrapper ${pkgs.ghostty}/bin/ghostty "$out/bin/ghostty" \
+        --set GTK_IM_MODULE simple
+    '';
+  };
+in
 {
   imports =
     [ # Include the results of the hardware scan.
       ./hardware-configuration.nix
+      ./microvms/agent.nix
+      ../../modules/dotfiles.nix
     ];
 
   # Use the systemd-boot EFI boot loader.
@@ -206,26 +220,26 @@
     bluez # Bluetooth support
     bluez-tools # Bluetooth tools
     bluetuith # Modern TUI Bluetooth manager
-    code-cursor
+    #code-cursor
     inotify-tools
     psmisc
     tpm2-tools
     tpm2-tss
     starship
-    hyprshot
-    hyprpaper
-    hyprpanel
-    hyprsunset
+    #hyprshot
+    #hyprpaper
+    #hyprpanel
+    #hyprsunset
     sunsetr
     brightnessctl
     inputs.matugen.packages.${pkgs.stdenv.hostPlatform.system}.default # Material You color generation
-    hyprshell
+    #hyprshell
     wl-clipboard
     cliphist
     nodejs
     devenv
     # inputs.swww.packages.${pkgs.stdenv.hostPlatform.system}.swww  # Commented out - not using swww
-    ghostty
+    ghosttyWithSimpleIme
     xwayland-satellite
     niriswitcher
     pwvucontrol
@@ -289,6 +303,10 @@
     settings = {
       trusted-users = [ "root" "rickard" ];
       experimental-features = [ "nix-command" "flakes" ];
+      extra-substituters = [ "https://noctalia.cachix.org" ];
+      extra-trusted-public-keys = [
+        "noctalia.cachix.org-1:pCOR47nnMEo5thcxNDtzWpOxNFQsBRglJzxWPp3dkU4="
+      ];
     };
     gc = { automatic = true; dates = "weekly"; options = "--delete-older-than 7d"; };
   };
