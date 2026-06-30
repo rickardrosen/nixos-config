@@ -42,10 +42,10 @@
     #  flake = false;
     # };
 
-    # Noctalia shell for niri
+    # Noctalia shell for niri (v5, cachix branch for pre-built binaries)
     noctalia = {
-      url = "github:noctalia-dev/noctalia-shell";
-      inputs.nixpkgs.follows = "nixpkgs";
+      url = "github:noctalia-dev/noctalia/cachix";
+      # no nixpkgs.follows — overriding inputs changes derivation hash, breaking cache
     };
 
     # Matugen - Material You color generation tool

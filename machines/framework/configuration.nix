@@ -122,6 +122,7 @@ in
     };
     # Disable power-profiles-daemon (pulled in by COSMIC) in favor of auto-cpufreq
     power-profiles-daemon.enable = false;
+    upower.enable = true; # required by noctalia v5
     auto-cpufreq = {
       enable = true;
       settings = {
