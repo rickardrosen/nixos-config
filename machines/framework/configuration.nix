@@ -258,6 +258,7 @@ in
     ripgrep
     gh
     mcp-nixos
+    vscode
   ];
 
   fonts.packages = with pkgs; [
