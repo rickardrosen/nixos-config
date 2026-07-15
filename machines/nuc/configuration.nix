@@ -24,13 +24,6 @@
   #      "video=3440x1440@100"
   #];
   boot.tmp.useTmpfs = true;
-  #systemd.additionalUpstreamSystemUnits = [ "tmp.mount" ];
-  systemd.mounts = [{
-    where = "/tmp";
-    what = "tmpfs";
-    type = "tmpfs";
-    options = "mode=1777,strictatime,rw,nosuid,nodev";
-  }];
 
   hardware.bluetooth = {
    enable = true;
