@@ -28,6 +28,14 @@
 
   # Prefer stable kernel for storage/boot reliability on this machine.
   boot.kernelPackages = pkgs.linuxPackages;
+  # Avoid systemd stage-1 dependency chains on this older host.
+  boot.initrd.systemd.enable = false;
+  # Ensure Intel VMD-backed NVMe controllers are discovered in initrd.
+  boot.initrd.availableKernelModules = [ "vmd" ];
+  boot.initrd.kernelModules = [ "vmd" ];
+  # Keep initrd logs visible while we validate the migration.
+  boot.initrd.verbose = true;
+  #boot.initrd.systemd.emergencyAccess = true;
   #boot.kernelParams = [
   #      "video=3440x1440@100"
   #];
