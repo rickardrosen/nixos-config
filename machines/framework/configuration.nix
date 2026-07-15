@@ -95,6 +95,7 @@ in
     };
   };
   services = {
+    fwupd.enable = true;
     #udev.packages = [ pkgs.yubikey-personalization ];
     pcscd.enable = true;
     udev.extraRules = ''
@@ -260,6 +261,8 @@ in
     gh
     mcp-nixos
     vscode
+    python3
+    obsidian
   ];
 
   fonts.packages = with pkgs; [
