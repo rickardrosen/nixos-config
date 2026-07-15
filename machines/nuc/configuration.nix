@@ -68,13 +68,17 @@
     dates = "weekly";
     options = "--delete-older-than 5d";
   };
+  nix.settings = {
+    trusted-users = [ "root" "rickard" ];
+    experimental-features = [ "nix-command" "flakes" ];
+  };
 
   location.latitude = 59.3293;
   location.longitude = 18.0686;
   nixpkgs.config = {
     allowUnfree = true;
     packageOverrides = pkgs: {
-      vaapiIntel = pkgs.vaapiIntel.override { enableHybridCodec = true; };
+      intel-vaapi-driver = pkgs.intel-vaapi-driver.override { enableHybridCodec = true; };
       #unstable = import <nixpkgs-unstable> {
       #  config = config.nixpkgs.config;
       #};
@@ -116,16 +120,15 @@
     flameshot
     podman-compose
     nodejs
-    nodePackages.typescript
-    nodePackages.typescript-language-server
-    nodePackages.diagnostic-languageserver
+    typescript
+    typescript-language-server
+    diagnostic-languageserver
     #(python3.withPackages(ps: with ps; [ i3ipc ]))
     terraform-ls
     #go-1.18.1
   ];
 
   virtualisation = {
-   lxd.enable = true;
    podman = {
      enable = true;
      # Create a `docker` alias for podman, to use it as a drop-in replacement
@@ -305,12 +308,13 @@
   fonts = {
     fontDir.enable = true;
     packages = with pkgs; [
-      (nerdfonts.override { fonts = [ "Meslo" "Hack" ]; })
+      nerd-fonts.meslo-lg
+      nerd-fonts.hack
       corefonts		  # Microsoft free fonts
       fira	      	  # Monospace
       inconsolata     	  # Monospace
       powerline-fonts
-      ubuntu_font_family
+      ubuntu-classic
       unifont		  # International languages
       source-code-pro
       font-awesome
@@ -321,6 +325,31 @@
 
   # Enable the OpenSSH daemon.
   services.openssh.enable = true;
+  services.matter-server = {
+    enable = true;
+    openFirewall = true;
+  };
+  services.home-assistant = {
+    enable = true;
+    openFirewall = true;
+    extraComponents = [
+      "analytics"
+      "default_config"
+      "google_translate"
+      "isal"
+      "matter"
+      "met"
+      "radio_browser"
+      "shopping_list"
+      "tuya"
+    ];
+    config = {
+      default_config = { };
+      http = {
+        server_host = "0.0.0.0";
+      };
+    };
+  };
   #virtualisation.docker.enable = true;
   # Open ports in the firewall.
   # networking.firewall.allowedTCPPorts = [ ... ];
@@ -331,16 +360,14 @@
   # Enable CUPS to print documents.
   # services.printing.enable = true;
   networking.networkmanager.enable = true;
-  # Enable sound.
-  sound.enable = true;
-  hardware.pulseaudio.enable = false;
-  #hardware.opengl.enable = true;
-  hardware.opengl = {
+  services.pulseaudio.enable = false;
+  #hardware.graphics.enable = true;
+  hardware.graphics = {
     enable = true;
     extraPackages = with pkgs; [
       intel-media-driver # LIBVA_DRIVER_NAME=iHD
-      vaapiIntel         # LIBVA_DRIVER_NAME=i965 (older but works better for Firefox/Chromium)
-      vaapiVdpau
+      intel-vaapi-driver # LIBVA_DRIVER_NAME=i965 (older but works better for Firefox/Chromium)
+      libva-vdpau-driver
       libvdpau-va-gl
     ];
   };
@@ -366,4 +393,3 @@
   system.stateVersion = "20.05"; # Did you read the comment?
 
 }
-

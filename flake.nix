@@ -80,6 +80,18 @@
           ];
         };
 
+        # Intel NUC home server configuration
+        nuc = nixpkgs.lib.nixosSystem {
+          specialArgs = { inherit inputs; };
+          modules = [
+            {
+              nixpkgs.hostPlatform = "x86_64-linux";
+              nixpkgs.config.allowUnfree = true;
+            }
+            ./machines/nuc/configuration.nix
+          ];
+        };
+
       };
     };
 }
