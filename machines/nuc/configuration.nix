@@ -18,8 +18,16 @@
       canTouchEfiVariables = true;
     };
   };
+  # Keep boot entries editable so we can append `systemd.debug-shell=1`
+  # for recovery on headless/locked-root situations.
+  boot.loader.systemd-boot.editor = true;
+  # Keep several generations for easy rollback after large upgrades.
+  boot.loader.systemd-boot.configurationLimit = 20;
+  # Avoid getting stuck on an inaccessible sulogin prompt on this host.
+  systemd.enableEmergencyMode = false;
 
-  boot.kernelPackages = pkgs.linuxPackages_latest;
+  # Prefer stable kernel for storage/boot reliability on this machine.
+  boot.kernelPackages = pkgs.linuxPackages;
   #boot.kernelParams = [
   #      "video=3440x1440@100"
   #];
