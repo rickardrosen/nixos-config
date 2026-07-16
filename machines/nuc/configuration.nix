@@ -333,6 +333,9 @@
   services.home-assistant = {
     enable = true;
     openFirewall = true;
+    customComponents = with pkgs.home-assistant-custom-components; [
+      localtuya
+    ];
     extraComponents = [
       "analytics"
       "default_config"
