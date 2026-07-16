@@ -26,8 +26,8 @@
   # Avoid getting stuck on an inaccessible sulogin prompt on this host.
   systemd.enableEmergencyMode = false;
 
-  # Prefer stable kernel for storage/boot reliability on this machine.
-  boot.kernelPackages = pkgs.linuxPackages;
+  # Keep latest kernel on this host; stable kernel regressed disk discovery.
+  boot.kernelPackages = pkgs.linuxPackages_latest;
   #boot.kernelParams = [
   #      "video=3440x1440@100"
   #];
