@@ -408,6 +408,16 @@ PY
         unit_system = "metric";
       };
 
+      zone = [
+        {
+          name = "Home";
+          latitude = 59.322333;
+          longitude = 17.989417;
+          radius = 500;
+          icon = "mdi:home";
+        }
+      ];
+
       http = {
         server_host = "0.0.0.0";
       };
@@ -450,7 +460,7 @@ PY
                           "select.smart_erv_smart_erv_exhaust_air"
                         ];
                       };
-                      data.option = "Speed 10";
+                      data.option = "Speed 8";
                     }
                   ];
                 }
@@ -471,7 +481,7 @@ PY
                           "select.smart_erv_smart_erv_exhaust_air"
                         ];
                       };
-                      data.option = "Speed 8";
+                      data.option = "Speed 10";
                     }
                   ];
                 }
@@ -514,6 +524,46 @@ PY
         };
       };
 
+      template = [
+        {
+          sensor = [
+            {
+              name = "ERV Indoor Reference Temperature";
+              unique_id = "erv_indoor_reference_temperature";
+              unit_of_measurement = "C";
+              device_class = "temperature";
+              availability = ''
+                {{
+                  has_value('sensor.alpstuga_air_quality_monitor_temperature')
+                  and has_value('sensor.alpstuga_air_quality_monitor_temperature_2')
+                }}
+              '';
+              state = ''
+                {% set t1 = states('sensor.alpstuga_air_quality_monitor_temperature') | float %}
+                {% set t2 = states('sensor.alpstuga_air_quality_monitor_temperature_2') | float %}
+                {{ [t1, t2] | max }}
+              '';
+            }
+          ];
+        }
+      ];
+
+      sensor = [
+        {
+          platform = "filter";
+          name = "ERV Indoor Reference Temperature Smoothed";
+          unique_id = "erv_indoor_reference_temperature_smoothed";
+          entity_id = "sensor.erv_indoor_reference_temperature";
+          filters = [
+            {
+              filter = "time_simple_moving_average";
+              window_size = "02:00";
+              precision = 1;
+            }
+          ];
+        }
+      ];
+
       automation = [
         {
           id = "erv_apply_mode_on_change";
@@ -540,12 +590,12 @@ PY
             {
               platform = "numeric_state";
               entity_id = "sensor.alpstuga_air_quality_monitor_carbon_dioxide";
-              above = 1000;
+              above = 800;
             }
             {
               platform = "numeric_state";
               entity_id = "sensor.alpstuga_air_quality_monitor_carbon_dioxide_2";
-              above = 1000;
+              above = 800;
             }
             {
               platform = "numeric_state";
@@ -596,13 +646,13 @@ PY
             {
               platform = "numeric_state";
               entity_id = "sensor.alpstuga_air_quality_monitor_carbon_dioxide";
-              below = 850;
+              below = 700;
               for = "00:15:00";
             }
             {
               platform = "numeric_state";
               entity_id = "sensor.alpstuga_air_quality_monitor_carbon_dioxide_2";
-              below = 850;
+              below = 700;
               for = "00:15:00";
             }
             {
@@ -639,12 +689,12 @@ PY
             {
               condition = "numeric_state";
               entity_id = "sensor.alpstuga_air_quality_monitor_carbon_dioxide";
-              below = 850;
+              below = 700;
             }
             {
               condition = "numeric_state";
               entity_id = "sensor.alpstuga_air_quality_monitor_carbon_dioxide_2";
-              below = 850;
+              below = 700;
             }
             {
               condition = "numeric_state";
@@ -724,7 +774,7 @@ PY
         }
         {
           id = "erv_normal_when_occupied";
-          alias = "ERV: Return to Normal when someone is home";
+          alias = "ERV: Return to Normal quickly when occupied";
           mode = "single";
           trigger = [
             {
@@ -735,11 +785,11 @@ PY
               platform = "numeric_state";
               entity_id = "zone.home";
               above = 0;
-              for = "00:02:00";
+              for = "00:00:30";
             }
             {
               platform = "time_pattern";
-              minutes = "/5";
+              minutes = "/2";
             }
           ];
           condition = [
@@ -749,9 +799,10 @@ PY
               above = 0;
             }
             {
-              condition = "state";
-              entity_id = "input_select.erv_mode";
-              state = "Away";
+              condition = "template";
+              value_template = ''
+                {{ states('input_select.erv_mode') not in ['Normal', 'Boost', 'Quiet'] }}
+              '';
             }
           ];
           action = [
@@ -759,6 +810,10 @@ PY
               service = "input_select.select_option";
               target.entity_id = "input_select.erv_mode";
               data.option = "Normal";
+            }
+            {
+              service = "script.turn_on";
+              target.entity_id = "script.erv_apply_mode";
             }
           ];
         }
@@ -774,14 +829,12 @@ PY
             {
               platform = "state";
               entity_id = [
-                "sensor.alpstuga_air_quality_monitor_temperature"
-                "sensor.alpstuga_air_quality_monitor_temperature_2"
                 "input_select.erv_mode"
               ];
             }
             {
               platform = "time_pattern";
-              minutes = "/15";
+              minutes = "/30";
             }
           ];
           action = [
@@ -814,9 +867,9 @@ PY
                   service = "number.set_value";
                   target.entity_id = "number.smart_erv_erv_bypass_start_temp_x";
                   data.value = ''
-                    {% set t1 = states('sensor.alpstuga_air_quality_monitor_temperature') | float(21) %}
-                    {% set t2 = states('sensor.alpstuga_air_quality_monitor_temperature_2') | float(21) %}
-                    {% set indoor = [t1, t2] | max %}
+                    {% set indoor_raw = states('sensor.erv_indoor_reference_temperature') | float(21) %}
+                    {% set indoor_smooth = states('sensor.erv_indoor_reference_temperature_smoothed') | float(indoor_raw) %}
+                    {% set indoor = (indoor_raw * 0.3) + (indoor_smooth * 0.7) %}
                     {% set x = (indoor - 2) | round(0, 'floor') %}
                     {{ [0, [50, x] | min] | max }}
                   '';
