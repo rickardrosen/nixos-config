@@ -400,6 +400,14 @@ PY
     ];
     config = {
       default_config = { };
+
+      homeassistant = {
+        latitude = 59.322333;
+        longitude = 17.989417;
+        time_zone = "Europe/Stockholm";
+        unit_system = "metric";
+      };
+
       http = {
         server_host = "0.0.0.0";
       };
@@ -408,10 +416,10 @@ PY
         erv_mode = {
           name = "ERV Mode";
           options = [
-            "Away"
-            "Quiet"
             "Normal"
             "Boost"
+            "Away"
+            "Quiet"
           ];
           initial = "Normal";
           icon = "mdi:fan";
@@ -720,13 +728,26 @@ PY
           mode = "single";
           trigger = [
             {
+              platform = "homeassistant";
+              event = "start";
+            }
+            {
               platform = "numeric_state";
               entity_id = "zone.home";
               above = 0;
               for = "00:02:00";
             }
+            {
+              platform = "time_pattern";
+              minutes = "/5";
+            }
           ];
           condition = [
+            {
+              condition = "numeric_state";
+              entity_id = "zone.home";
+              above = 0;
+            }
             {
               condition = "state";
               entity_id = "input_select.erv_mode";
@@ -738,51 +759,6 @@ PY
               service = "input_select.select_option";
               target.entity_id = "input_select.erv_mode";
               data.option = "Normal";
-            }
-          ];
-        }
-        {
-          id = "erv_mode_sync_on_ha_start";
-          alias = "ERV: Sync mode from home occupancy on startup";
-          mode = "single";
-          trigger = [
-            {
-              platform = "homeassistant";
-              event = "start";
-            }
-          ];
-          action = [
-            {
-              choose = [
-                {
-                  conditions = [
-                    {
-                      condition = "numeric_state";
-                      entity_id = "zone.home";
-                      below = 1;
-                    }
-                  ];
-                  sequence = [
-                    {
-                      service = "input_select.select_option";
-                      target.entity_id = "input_select.erv_mode";
-                      data.option = "Away";
-                    }
-                  ];
-                }
-              ];
-              default = [
-                {
-                  condition = "state";
-                  entity_id = "input_select.erv_mode";
-                  state = "Away";
-                }
-                {
-                  service = "input_select.select_option";
-                  target.entity_id = "input_select.erv_mode";
-                  data.option = "Normal";
-                }
-              ];
             }
           ];
         }
