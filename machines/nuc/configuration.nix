@@ -381,9 +381,17 @@ PY
       enable-test-net-dcl = true;
     };
   };
+
+  services.caddy = {
+    enable = true;
+    virtualHosts."gg26c.duckdns.org".extraConfig = ''
+      reverse_proxy 127.0.0.1:8123
+    '';
+  };
+
   services.home-assistant = {
     enable = true;
-    openFirewall = true;
+    openFirewall = false;
     customComponents = with pkgs.home-assistant-custom-components; [
       localtuya
     ];
@@ -406,6 +414,7 @@ PY
         longitude = 17.989417;
         time_zone = "Europe/Stockholm";
         unit_system = "metric";
+        external_url = "https://gg26c.duckdns.org";
       };
 
       zone = [
@@ -420,6 +429,11 @@ PY
 
       http = {
         server_host = "0.0.0.0";
+        use_x_forwarded_for = true;
+        trusted_proxies = [
+          "127.0.0.1"
+          "::1"
+        ];
       };
 
       input_select = {
@@ -460,7 +474,7 @@ PY
                           "select.smart_erv_smart_erv_exhaust_air"
                         ];
                       };
-                      data.option = "Speed 8";
+                      data.option = "Speed 10";
                     }
                   ];
                 }
@@ -481,7 +495,7 @@ PY
                           "select.smart_erv_smart_erv_exhaust_air"
                         ];
                       };
-                      data.option = "Speed 10";
+                      data.option = "Speed 8";
                     }
                   ];
                 }
@@ -870,7 +884,7 @@ PY
                     {% set indoor_raw = states('sensor.erv_indoor_reference_temperature') | float(21) %}
                     {% set indoor_smooth = states('sensor.erv_indoor_reference_temperature_smoothed') | float(indoor_raw) %}
                     {% set indoor = (indoor_raw * 0.3) + (indoor_smooth * 0.7) %}
-                    {% set x = (indoor - 2) | round(0, 'floor') %}
+                    {% set x = (indoor - 3) | round(0, 'floor') %}
                     {{ [0, [50, x] | min] | max }}
                   '';
                 }
@@ -887,6 +901,10 @@ PY
     };
   };
   #virtualisation.docker.enable = true;
+  networking.firewall.allowedTCPPorts = [
+    80
+    443
+  ];
   # Open ports in the firewall.
   # networking.firewall.allowedTCPPorts = [ ... ];
   # networking.firewall.allowedUDPPorts = [ ... ];
