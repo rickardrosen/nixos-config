@@ -330,6 +330,11 @@
     enable = true;
     openFirewall = true;
     package = pkgs.python3Packages.python-matter-server.overridePythonAttrs (old: {
+      # python-matter-server 8.1.2 imports `cryptography.x509` at startup.
+      # Ensure it is always present in the runtime closure.
+      propagatedBuildInputs = (old.propagatedBuildInputs or [ ]) ++ [
+        pkgs.python3Packages.cryptography
+      ];
       postPatch = (old.postPatch or "") + ''
         substituteInPlace matter_server/server/helpers/paa_certificates.py \
           --replace-fail "except (ClientError, TimeoutError) as err:" "except (ClientError, TimeoutError, ValueError) as err:"
