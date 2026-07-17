@@ -333,6 +333,39 @@
       postPatch = (old.postPatch or "") + ''
         substituteInPlace matter_server/server/helpers/paa_certificates.py \
           --replace-fail "except (ClientError, TimeoutError) as err:" "except (ClientError, TimeoutError, ValueError) as err:"
+
+        python - <<'PY'
+from pathlib import Path
+
+path = Path("matter_server/server/helpers/paa_certificates.py")
+source = path.read_text()
+
+old = '''                if await write_paa_root_cert(
+                    paa_root_cert_dir,
+                    base_name,
+                    certificate,
+                    subject,
+                ):
+                    fetch_count += 1'''
+
+new = '''                try:
+                    if await write_paa_root_cert(
+                        paa_root_cert_dir,
+                        base_name,
+                        certificate,
+                        subject,
+                    ):
+                        fetch_count += 1
+                except ValueError as err:
+                    LOGGER.warning(
+                        "Skipping malformed certificate from %s: %s", url, err
+                    )'''
+
+if old not in source:
+    raise RuntimeError("Expected certificate write block not found")
+
+path.write_text(source.replace(old, new))
+PY
       '';
     });
     extraArgs = {
