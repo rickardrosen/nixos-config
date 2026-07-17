@@ -410,10 +410,10 @@ PY
           options = [
             "Away"
             "Quiet"
-            "Auto"
+            "Normal"
             "Boost"
           ];
-          initial = "Auto";
+          initial = "Normal";
           icon = "mdi:fan";
         };
       };
@@ -451,7 +451,7 @@ PY
                     {
                       condition = "state";
                       entity_id = "input_select.erv_mode";
-                      state = "Auto";
+                      state = "Normal";
                     }
                   ];
                   sequence = [
@@ -663,7 +663,7 @@ PY
             {
               service = "input_select.select_option";
               target.entity_id = "input_select.erv_mode";
-              data.option = "Auto";
+              data.option = "Normal";
             }
           ];
         }
@@ -690,57 +690,99 @@ PY
             {
               service = "input_select.select_option";
               target.entity_id = "input_select.erv_mode";
-              data.option = "Auto";
+              data.option = "Normal";
             }
           ];
         }
         {
-          id = "erv_night_quiet";
-          alias = "ERV: Quiet at night";
+          id = "erv_away_when_empty";
+          alias = "ERV: Set Away when nobody home";
           mode = "single";
           trigger = [
             {
-              platform = "time";
-              at = "23:00:00";
-            }
-          ];
-          condition = [
-            {
-              condition = "state";
-              entity_id = "input_select.erv_mode";
-              state = "Auto";
+              platform = "numeric_state";
+              entity_id = "zone.home";
+              below = 1;
+              for = "00:15:00";
             }
           ];
           action = [
             {
               service = "input_select.select_option";
               target.entity_id = "input_select.erv_mode";
-              data.option = "Quiet";
+              data.option = "Away";
             }
           ];
         }
         {
-          id = "erv_morning_auto";
-          alias = "ERV: Auto in morning";
+          id = "erv_normal_when_occupied";
+          alias = "ERV: Return to Normal when someone is home";
           mode = "single";
           trigger = [
             {
-              platform = "time";
-              at = "07:00:00";
+              platform = "numeric_state";
+              entity_id = "zone.home";
+              above = 0;
+              for = "00:02:00";
             }
           ];
           condition = [
             {
               condition = "state";
               entity_id = "input_select.erv_mode";
-              state = "Quiet";
+              state = "Away";
             }
           ];
           action = [
             {
               service = "input_select.select_option";
               target.entity_id = "input_select.erv_mode";
-              data.option = "Auto";
+              data.option = "Normal";
+            }
+          ];
+        }
+        {
+          id = "erv_mode_sync_on_ha_start";
+          alias = "ERV: Sync mode from home occupancy on startup";
+          mode = "single";
+          trigger = [
+            {
+              platform = "homeassistant";
+              event = "start";
+            }
+          ];
+          action = [
+            {
+              choose = [
+                {
+                  conditions = [
+                    {
+                      condition = "numeric_state";
+                      entity_id = "zone.home";
+                      below = 1;
+                    }
+                  ];
+                  sequence = [
+                    {
+                      service = "input_select.select_option";
+                      target.entity_id = "input_select.erv_mode";
+                      data.option = "Away";
+                    }
+                  ];
+                }
+              ];
+              default = [
+                {
+                  condition = "state";
+                  entity_id = "input_select.erv_mode";
+                  state = "Away";
+                }
+                {
+                  service = "input_select.select_option";
+                  target.entity_id = "input_select.erv_mode";
+                  data.option = "Normal";
+                }
+              ];
             }
           ];
         }
