@@ -353,6 +353,7 @@
       "google_translate"
       "isal"
       "matter"
+      "thread"
       "met"
       "shopping_list"
       "tuya"
