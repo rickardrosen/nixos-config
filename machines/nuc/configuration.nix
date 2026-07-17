@@ -340,26 +340,30 @@ from pathlib import Path
 path = Path("matter_server/server/helpers/paa_certificates.py")
 source = path.read_text()
 
-old = '''                if await write_paa_root_cert(
-                    paa_root_cert_dir,
-                    base_name,
-                    certificate,
-                    subject,
-                ):
-                    fetch_count += 1'''
+old = (
+    "                if await write_paa_root_cert(\n"
+    "                    paa_root_cert_dir,\n"
+    "                    base_name,\n"
+    "                    certificate,\n"
+    "                    subject,\n"
+    "                ):\n"
+    "                    fetch_count += 1"
+)
 
-new = '''                try:
-                    if await write_paa_root_cert(
-                        paa_root_cert_dir,
-                        base_name,
-                        certificate,
-                        subject,
-                    ):
-                        fetch_count += 1
-                except ValueError as err:
-                    LOGGER.warning(
-                        "Skipping malformed certificate from %s: %s", url, err
-                    )'''
+new = (
+    "                try:\n"
+    "                    if await write_paa_root_cert(\n"
+    "                        paa_root_cert_dir,\n"
+    "                        base_name,\n"
+    "                        certificate,\n"
+    "                        subject,\n"
+    "                    ):\n"
+    "                        fetch_count += 1\n"
+    "                except ValueError as err:\n"
+    "                    LOGGER.warning(\n"
+    "                        \"Skipping malformed certificate from %s: %s\", url, err\n"
+    "                    )"
+)
 
 if old not in source:
     raise RuntimeError("Expected certificate write block not found")
