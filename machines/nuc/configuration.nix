@@ -329,6 +329,17 @@
   services.matter-server = {
     enable = true;
     openFirewall = true;
+    package = pkgs.python3Packages.python-matter-server.overridePythonAttrs (old: {
+      postPatch = (old.postPatch or "") + ''
+        substituteInPlace matter_server/server/helpers/paa_certificates.py \
+          --replace-fail "except (ClientError, TimeoutError) as err:" "except (ClientError, TimeoutError, ValueError) as err:"
+      '';
+    });
+    extraArgs = {
+      # Work around malformed certs occasionally served by DCL that crash
+      # python-matter-server during PAA fetch at startup.
+      paa-root-cert-dir = "/var/lib/matter-server/credentials/development/paa-root-certs";
+    };
   };
   services.home-assistant = {
     enable = true;
@@ -343,7 +354,6 @@
       "isal"
       "matter"
       "met"
-      "radio_browser"
       "shopping_list"
       "tuya"
     ];
