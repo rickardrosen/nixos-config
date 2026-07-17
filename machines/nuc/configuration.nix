@@ -339,6 +339,9 @@
       # Work around malformed certs occasionally served by DCL that crash
       # python-matter-server during PAA fetch at startup.
       paa-root-cert-dir = "/var/lib/matter-server/credentials/development/paa-root-certs";
+      # Some devices still chain to certs that are only present in test-net DCL
+      # or the upstream SDK cert bundle.
+      enable-test-net-dcl = true;
     };
   };
   services.home-assistant = {
