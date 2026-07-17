@@ -403,6 +403,416 @@ PY
       http = {
         server_host = "0.0.0.0";
       };
+
+      input_select = {
+        erv_mode = {
+          name = "ERV Mode";
+          options = [
+            "Away"
+            "Quiet"
+            "Auto"
+            "Boost"
+          ];
+          initial = "Auto";
+          icon = "mdi:fan";
+        };
+      };
+
+      script = {
+        erv_apply_mode = {
+          alias = "ERV Apply Mode";
+          mode = "restart";
+          sequence = [
+            {
+              choose = [
+                {
+                  conditions = [
+                    {
+                      condition = "state";
+                      entity_id = "input_select.erv_mode";
+                      state = "Boost";
+                    }
+                  ];
+                  sequence = [
+                    {
+                      service = "select.select_option";
+                      target = {
+                        entity_id = [
+                          "select.smart_erv_smart_erv_supply_air"
+                          "select.smart_erv_smart_erv_exhaust_air"
+                        ];
+                      };
+                      data.option = "Speed 10";
+                    }
+                  ];
+                }
+                {
+                  conditions = [
+                    {
+                      condition = "state";
+                      entity_id = "input_select.erv_mode";
+                      state = "Auto";
+                    }
+                  ];
+                  sequence = [
+                    {
+                      service = "select.select_option";
+                      target = {
+                        entity_id = [
+                          "select.smart_erv_smart_erv_supply_air"
+                          "select.smart_erv_smart_erv_exhaust_air"
+                        ];
+                      };
+                      data.option = "Speed 8";
+                    }
+                  ];
+                }
+                {
+                  conditions = [
+                    {
+                      condition = "state";
+                      entity_id = "input_select.erv_mode";
+                      state = "Quiet";
+                    }
+                  ];
+                  sequence = [
+                    {
+                      service = "select.select_option";
+                      target = {
+                        entity_id = [
+                          "select.smart_erv_smart_erv_supply_air"
+                          "select.smart_erv_smart_erv_exhaust_air"
+                        ];
+                      };
+                      data.option = "Speed 3";
+                    }
+                  ];
+                }
+              ];
+              default = [
+                {
+                  service = "select.select_option";
+                  target = {
+                    entity_id = [
+                      "select.smart_erv_smart_erv_supply_air"
+                      "select.smart_erv_smart_erv_exhaust_air"
+                    ];
+                  };
+                  data.option = "Speed 2";
+                }
+              ];
+            }
+          ];
+        };
+      };
+
+      automation = [
+        {
+          id = "erv_apply_mode_on_change";
+          alias = "ERV: Apply selected mode";
+          mode = "single";
+          trigger = [
+            {
+              platform = "state";
+              entity_id = "input_select.erv_mode";
+            }
+          ];
+          action = [
+            {
+              service = "script.turn_on";
+              target.entity_id = "script.erv_apply_mode";
+            }
+          ];
+        }
+        {
+          id = "erv_boost_on_poor_air";
+          alias = "ERV: Boost on poor air";
+          mode = "single";
+          trigger = [
+            {
+              platform = "numeric_state";
+              entity_id = "sensor.alpstuga_air_quality_monitor_carbon_dioxide";
+              above = 1000;
+            }
+            {
+              platform = "numeric_state";
+              entity_id = "sensor.alpstuga_air_quality_monitor_carbon_dioxide_2";
+              above = 1000;
+            }
+            {
+              platform = "numeric_state";
+              entity_id = "sensor.alpstuga_air_quality_monitor_pm2_5";
+              above = 20;
+            }
+            {
+              platform = "numeric_state";
+              entity_id = "sensor.alpstuga_air_quality_monitor_pm2_5_2";
+              above = 20;
+            }
+            {
+              platform = "numeric_state";
+              entity_id = "sensor.alpstuga_air_quality_monitor_humidity";
+              above = 65;
+            }
+            {
+              platform = "numeric_state";
+              entity_id = "sensor.alpstuga_air_quality_monitor_humidity_2";
+              above = 65;
+            }
+          ];
+          condition = [
+            {
+              condition = "not";
+              conditions = [
+                {
+                  condition = "state";
+                  entity_id = "input_select.erv_mode";
+                  state = "Boost";
+                }
+              ];
+            }
+          ];
+          action = [
+            {
+              service = "input_select.select_option";
+              target.entity_id = "input_select.erv_mode";
+              data.option = "Boost";
+            }
+          ];
+        }
+        {
+          id = "erv_recover_to_auto";
+          alias = "ERV: Back to auto when air recovers";
+          mode = "single";
+          trigger = [
+            {
+              platform = "numeric_state";
+              entity_id = "sensor.alpstuga_air_quality_monitor_carbon_dioxide";
+              below = 850;
+              for = "00:15:00";
+            }
+            {
+              platform = "numeric_state";
+              entity_id = "sensor.alpstuga_air_quality_monitor_carbon_dioxide_2";
+              below = 850;
+              for = "00:15:00";
+            }
+            {
+              platform = "numeric_state";
+              entity_id = "sensor.alpstuga_air_quality_monitor_pm2_5";
+              below = 10;
+              for = "00:15:00";
+            }
+            {
+              platform = "numeric_state";
+              entity_id = "sensor.alpstuga_air_quality_monitor_pm2_5_2";
+              below = 10;
+              for = "00:15:00";
+            }
+            {
+              platform = "numeric_state";
+              entity_id = "sensor.alpstuga_air_quality_monitor_humidity";
+              below = 58;
+              for = "00:15:00";
+            }
+            {
+              platform = "numeric_state";
+              entity_id = "sensor.alpstuga_air_quality_monitor_humidity_2";
+              below = 58;
+              for = "00:15:00";
+            }
+          ];
+          condition = [
+            {
+              condition = "state";
+              entity_id = "input_select.erv_mode";
+              state = "Boost";
+            }
+            {
+              condition = "numeric_state";
+              entity_id = "sensor.alpstuga_air_quality_monitor_carbon_dioxide";
+              below = 850;
+            }
+            {
+              condition = "numeric_state";
+              entity_id = "sensor.alpstuga_air_quality_monitor_carbon_dioxide_2";
+              below = 850;
+            }
+            {
+              condition = "numeric_state";
+              entity_id = "sensor.alpstuga_air_quality_monitor_pm2_5";
+              below = 10;
+            }
+            {
+              condition = "numeric_state";
+              entity_id = "sensor.alpstuga_air_quality_monitor_pm2_5_2";
+              below = 10;
+            }
+            {
+              condition = "numeric_state";
+              entity_id = "sensor.alpstuga_air_quality_monitor_humidity";
+              below = 58;
+            }
+            {
+              condition = "numeric_state";
+              entity_id = "sensor.alpstuga_air_quality_monitor_humidity_2";
+              below = 58;
+            }
+          ];
+          action = [
+            {
+              service = "input_select.select_option";
+              target.entity_id = "input_select.erv_mode";
+              data.option = "Auto";
+            }
+          ];
+        }
+        {
+          id = "erv_boost_timeout";
+          alias = "ERV: Boost timeout";
+          mode = "single";
+          trigger = [
+            {
+              platform = "state";
+              entity_id = "input_select.erv_mode";
+              to = "Boost";
+              for = "00:45:00";
+            }
+          ];
+          condition = [
+            {
+              condition = "state";
+              entity_id = "input_select.erv_mode";
+              state = "Boost";
+            }
+          ];
+          action = [
+            {
+              service = "input_select.select_option";
+              target.entity_id = "input_select.erv_mode";
+              data.option = "Auto";
+            }
+          ];
+        }
+        {
+          id = "erv_night_quiet";
+          alias = "ERV: Quiet at night";
+          mode = "single";
+          trigger = [
+            {
+              platform = "time";
+              at = "23:00:00";
+            }
+          ];
+          condition = [
+            {
+              condition = "state";
+              entity_id = "input_select.erv_mode";
+              state = "Auto";
+            }
+          ];
+          action = [
+            {
+              service = "input_select.select_option";
+              target.entity_id = "input_select.erv_mode";
+              data.option = "Quiet";
+            }
+          ];
+        }
+        {
+          id = "erv_morning_auto";
+          alias = "ERV: Auto in morning";
+          mode = "single";
+          trigger = [
+            {
+              platform = "time";
+              at = "07:00:00";
+            }
+          ];
+          condition = [
+            {
+              condition = "state";
+              entity_id = "input_select.erv_mode";
+              state = "Quiet";
+            }
+          ];
+          action = [
+            {
+              service = "input_select.select_option";
+              target.entity_id = "input_select.erv_mode";
+              data.option = "Auto";
+            }
+          ];
+        }
+        {
+          id = "erv_bypass_window_auto";
+          alias = "ERV: Auto-set bypass window from indoor temps";
+          mode = "restart";
+          trigger = [
+            {
+              platform = "homeassistant";
+              event = "start";
+            }
+            {
+              platform = "state";
+              entity_id = [
+                "sensor.alpstuga_air_quality_monitor_temperature"
+                "sensor.alpstuga_air_quality_monitor_temperature_2"
+                "input_select.erv_mode"
+              ];
+            }
+            {
+              platform = "time_pattern";
+              minutes = "/15";
+            }
+          ];
+          action = [
+            {
+              choose = [
+                {
+                  conditions = [
+                    {
+                      condition = "state";
+                      entity_id = "input_select.erv_mode";
+                      state = "Away";
+                    }
+                  ];
+                  sequence = [
+                    {
+                      service = "number.set_value";
+                      target.entity_id = "number.smart_erv_erv_bypass_start_temp_x";
+                      data.value = 30;
+                    }
+                    {
+                      service = "number.set_value";
+                      target.entity_id = "number.smart_erv_erv_bypass_range_y";
+                      data.value = 2;
+                    }
+                  ];
+                }
+              ];
+              default = [
+                {
+                  service = "number.set_value";
+                  target.entity_id = "number.smart_erv_erv_bypass_start_temp_x";
+                  data.value = ''
+                    {% set t1 = states('sensor.alpstuga_air_quality_monitor_temperature') | float(21) %}
+                    {% set t2 = states('sensor.alpstuga_air_quality_monitor_temperature_2') | float(21) %}
+                    {% set indoor = [t1, t2] | max %}
+                    {% set x = (indoor - 2) | round(0, 'floor') %}
+                    {{ [0, [50, x] | min] | max }}
+                  '';
+                }
+                {
+                  service = "number.set_value";
+                  target.entity_id = "number.smart_erv_erv_bypass_range_y";
+                  data.value = 3;
+                }
+              ];
+            }
+          ];
+        }
+      ];
     };
   };
   #virtualisation.docker.enable = true;
