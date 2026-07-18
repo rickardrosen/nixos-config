@@ -402,6 +402,7 @@ PY
         domain = "lksystems";
         version = "v0.2.1-alpha";
         src = inputs.lksystems;
+        dependencies = [ pkgs.home-assistant.python3Packages.aiohttp ];
 
         meta = {
           changelog = "https://github.com/angoyd/ha-lksystems/releases/tag/${version}";
