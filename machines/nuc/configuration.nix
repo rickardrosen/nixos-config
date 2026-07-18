@@ -395,6 +395,9 @@ PY
   services.home-assistant = {
     enable = true;
     openFirewall = false;
+    # Keep MELCloud Home Python library explicitly available even if component
+    # auto-detection is skipped by config-flow-only usage.
+    extraPackages = ps: [ ps.aiomelcloudhome ];
     customComponents = with pkgs.home-assistant-custom-components; [
       localtuya
       (pkgs.buildHomeAssistantComponent rec {
@@ -416,7 +419,7 @@ PY
       "default_config"
       "google_translate"
       "isal"
-      "melcloud"
+      "melcloud_home"
       "matter"
       "thread"
       "met"
