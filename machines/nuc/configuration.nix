@@ -397,12 +397,25 @@ PY
     openFirewall = false;
     customComponents = with pkgs.home-assistant-custom-components; [
       localtuya
+      (pkgs.buildHomeAssistantComponent rec {
+        owner = "angoyd";
+        domain = "lksystems";
+        version = "v0.2.1-alpha";
+        src = inputs.lksystems;
+
+        meta = {
+          changelog = "https://github.com/angoyd/ha-lksystems/releases/tag/${version}";
+          description = "Custom Home Assistant integration for LK Systems MyLK devices";
+          homepage = "https://github.com/angoyd/ha-lksystems";
+        };
+      })
     ];
     extraComponents = [
       "analytics"
       "default_config"
       "google_translate"
       "isal"
+      "melcloud"
       "matter"
       "thread"
       "met"

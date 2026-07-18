@@ -1,5 +1,22 @@
 {
   "nodes": {
+    "lksystems": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1763718439,
+        "narHash": "sha256-3AdKaIO1Xc+ydP2VJt2GD3U+0jzE0oUDugXJnSlMbCc=",
+        "owner": "angoyd",
+        "repo": "ha-lksystems",
+        "rev": "469532ebb1caa817367ccc7217b52b9fa8951a66",
+        "type": "github"
+      },
+      "original": {
+        "owner": "angoyd",
+        "ref": "v0.2.1-alpha",
+        "repo": "ha-lksystems",
+        "type": "github"
+      }
+    },
     "matugen": {
       "inputs": {
         "nixpkgs": [
@@ -124,6 +141,7 @@
     },
     "root": {
       "inputs": {
+        "lksystems": "lksystems",
         "matugen": "matugen",
         "microvm": "microvm",
         "nixos-hardware": "nixos-hardware",

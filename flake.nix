@@ -54,6 +54,12 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # LK Systems custom Home Assistant integration (LK Arc / MyLK cloud)
+    lksystems = {
+      url = "github:angoyd/ha-lksystems?ref=v0.2.1-alpha";
+      flake = false;
+    };
+
     # Ghostty terminal (commented out like in framework flake)
     #ghostty.url = "github:ghostty-org/ghostty";
   };
