@@ -387,6 +387,9 @@ PY
     virtualHosts."gg26c.duckdns.org".extraConfig = ''
       reverse_proxy 127.0.0.1:8123
     '';
+    virtualHosts."http://nuc.local".extraConfig = ''
+      reverse_proxy 127.0.0.1:8123
+    '';
   };
 
   services.home-assistant = {
@@ -415,6 +418,7 @@ PY
         time_zone = "Europe/Stockholm";
         unit_system = "metric";
         external_url = "https://gg26c.duckdns.org";
+        internal_url = "http://nuc.local";
       };
 
       zone = [
@@ -904,6 +908,7 @@ PY
   networking.firewall.allowedTCPPorts = [
     80
     443
+    8123
   ];
   # Open ports in the firewall.
   # networking.firewall.allowedTCPPorts = [ ... ];
