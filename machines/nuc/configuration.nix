@@ -544,6 +544,8 @@ PY
 
       template = [
         {
+          # The ERV Tuya profile does not expose a true bypass-open state.
+          # These helpers provide an "expected bypass window" for dashboards and debugging.
           sensor = [
             {
               name = "ERV Indoor Reference Temperature";
@@ -552,14 +554,83 @@ PY
               device_class = "temperature";
               availability = ''
                 {{
-                  has_value('sensor.alpstuga_air_quality_monitor_temperature')
-                  and has_value('sensor.alpstuga_air_quality_monitor_temperature_2')
+                  has_value('sensor.alpstuga_air_quality_monitor_temperature_2')
+                  or has_value('sensor.alpstuga_air_quality_monitor_temperature')
                 }}
               '';
               state = ''
-                {% set t1 = states('sensor.alpstuga_air_quality_monitor_temperature') | float %}
-                {% set t2 = states('sensor.alpstuga_air_quality_monitor_temperature_2') | float %}
-                {{ [t1, t2] | max }}
+                {% if has_value('sensor.alpstuga_air_quality_monitor_temperature_2') %}
+                  {{ states('sensor.alpstuga_air_quality_monitor_temperature_2') | float }}
+                {% elif has_value('sensor.alpstuga_air_quality_monitor_temperature') %}
+                  {{ states('sensor.alpstuga_air_quality_monitor_temperature') | float }}
+                {% else %}
+                  {{ none }}
+                {% endif %}
+              '';
+            }
+            {
+              name = "ERV Outdoor Temperature";
+              unique_id = "erv_outdoor_temperature";
+              unit_of_measurement = "C";
+              device_class = "temperature";
+              availability = ''
+                {{
+                  has_value('sensor.smart_erv_oa_temperature')
+                  or has_value('sensor.smart_erv_temp_outdoor')
+                  or has_value('sensor.smart_erv_outdoor_temperature')
+                }}
+              '';
+              state = ''
+                {% if has_value('sensor.smart_erv_oa_temperature') %}
+                  {{ states('sensor.smart_erv_oa_temperature') | float }}
+                {% elif has_value('sensor.smart_erv_temp_outdoor') %}
+                  {{ states('sensor.smart_erv_temp_outdoor') | float }}
+                {% elif has_value('sensor.smart_erv_outdoor_temperature') %}
+                  {{ states('sensor.smart_erv_outdoor_temperature') | float }}
+                {% else %}
+                  {{ none }}
+                {% endif %}
+              '';
+            }
+            {
+              name = "ERV Bypass Temperature Max";
+              unique_id = "erv_bypass_temperature_max";
+              unit_of_measurement = "C";
+              device_class = "temperature";
+              availability = ''
+                {{
+                  has_value('number.smart_erv_erv_bypass_start_temp_x')
+                  and has_value('number.smart_erv_erv_bypass_range_y')
+                }}
+              '';
+              state = ''
+                {% set x = states('number.smart_erv_erv_bypass_start_temp_x') | float %}
+                {% set y = states('number.smart_erv_erv_bypass_range_y') | float %}
+                {{ x + y }}
+              '';
+            }
+          ];
+          binary_sensor = [
+            {
+              name = "ERV Bypass Cooling Window Matched";
+              unique_id = "erv_bypass_cooling_window_matched";
+              availability = ''
+                {{
+                  has_value('sensor.erv_outdoor_temperature')
+                  and has_value('number.smart_erv_erv_bypass_start_temp_x')
+                  and has_value('number.smart_erv_erv_bypass_range_y')
+                }}
+              '';
+              state = ''
+                {% set outdoor = states('sensor.erv_outdoor_temperature') | float(999) %}
+                {% set x = states('number.smart_erv_erv_bypass_start_temp_x') | float(999) %}
+                {% set y = states('number.smart_erv_erv_bypass_range_y') | float(0) %}
+                {% set max_t = x + y %}
+                {{
+                  states('input_select.erv_mode') != 'Away'
+                  and outdoor >= x
+                  and outdoor <= max_t
+                }}
               '';
             }
           ];
@@ -857,45 +928,71 @@ PY
           ];
           action = [
             {
+              variables = {
+                # Cooling-only strategy:
+                # - Disable bypass when indoor is already cool.
+                # - Otherwise allow bypass only when OA is a few degrees below indoor.
+                target_x = ''
+                  {% set indoor_raw = states('sensor.erv_indoor_reference_temperature') | float(21) %}
+                  {% set indoor_smooth = states('sensor.erv_indoor_reference_temperature_smoothed') | float(indoor_raw) %}
+                  {% set indoor = (indoor_raw * 0.3) + (indoor_smooth * 0.7) %}
+                  {% if indoor <= 20.5 %}
+                    30
+                  {% else %}
+                    {% set x = (indoor - 4) | round(0, 'floor') %}
+                    {{ [15, [30, x] | min] | max }}
+                  {% endif %}
+                '';
+                target_y = 2;
+              };
+            }
+            {
               choose = [
                 {
                   conditions = [
                     {
-                      condition = "state";
-                      entity_id = "input_select.erv_mode";
-                      state = "Away";
+                      condition = "template";
+                      value_template = ''
+                        {{
+                          states('number.smart_erv_erv_bypass_start_temp_x') | float(-999)
+                          != target_x | float(-998)
+                        }}
+                      '';
                     }
                   ];
                   sequence = [
                     {
+                      # Write only on change to reduce chatter against the Tuya MCU.
                       service = "number.set_value";
                       target.entity_id = "number.smart_erv_erv_bypass_start_temp_x";
-                      data.value = 30;
-                    }
-                    {
-                      service = "number.set_value";
-                      target.entity_id = "number.smart_erv_erv_bypass_range_y";
-                      data.value = 2;
+                      data.value = "{{ target_x | float }}";
                     }
                   ];
                 }
               ];
-              default = [
+            }
+            {
+              choose = [
                 {
-                  service = "number.set_value";
-                  target.entity_id = "number.smart_erv_erv_bypass_start_temp_x";
-                  data.value = ''
-                    {% set indoor_raw = states('sensor.erv_indoor_reference_temperature') | float(21) %}
-                    {% set indoor_smooth = states('sensor.erv_indoor_reference_temperature_smoothed') | float(indoor_raw) %}
-                    {% set indoor = (indoor_raw * 0.3) + (indoor_smooth * 0.7) %}
-                    {% set x = (indoor - 3) | round(0, 'floor') %}
-                    {{ [0, [50, x] | min] | max }}
-                  '';
-                }
-                {
-                  service = "number.set_value";
-                  target.entity_id = "number.smart_erv_erv_bypass_range_y";
-                  data.value = 3;
+                  conditions = [
+                    {
+                      condition = "template";
+                      value_template = ''
+                        {{
+                          states('number.smart_erv_erv_bypass_range_y') | float(-999)
+                          != target_y | float(-998)
+                        }}
+                      '';
+                    }
+                  ];
+                  sequence = [
+                    {
+                      # Write only on change to reduce chatter against the Tuya MCU.
+                      service = "number.set_value";
+                      target.entity_id = "number.smart_erv_erv_bypass_range_y";
+                      data.value = "{{ target_y | float }}";
+                    }
+                  ];
                 }
               ];
             }
