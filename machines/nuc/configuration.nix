@@ -1030,6 +1030,23 @@ PY
   # Enable CUPS to print documents.
   # services.printing.enable = true;
   networking.networkmanager.enable = true;
+  # Make DNS resolution deterministic for cloud-backed integrations (LK/MELCloud).
+  networking.networkmanager.dns = "systemd-resolved";
+  networking.networkmanager.insertNameservers = [
+    "1.1.1.1"
+    "1.0.0.1"
+    "9.9.9.9"
+    "8.8.8.8"
+  ];
+  services.resolved.enable = true;
+  services.resolved.settings.Resolve.FallbackDNS = [
+    "1.1.1.1"
+    "1.0.0.1"
+    "9.9.9.9"
+    "8.8.8.8"
+  ];
+  services.resolved.settings.Resolve.LLMNR = false;
+  services.resolved.settings.Resolve.MulticastDNS = false;
   services.pulseaudio.enable = false;
   #hardware.graphics.enable = true;
   hardware.graphics = {
