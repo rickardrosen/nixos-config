@@ -406,6 +406,40 @@ PY
         version = "v0.2.1-alpha";
         src = inputs.lksystems;
         dependencies = [ pkgs.home-assistant.python3Packages.aiohttp ];
+        postPatch = ''
+          python - <<'PY'
+from pathlib import Path
+
+path = Path("custom_components/lksystems/sensor.py")
+source = path.read_text()
+
+source = source.replace(
+    "self._device_class = device_class",
+    "self._attr_device_class = device_class",
+)
+source = source.replace(
+    "self._attr_unit_of_measurement = unit_of_measurement",
+    "self._attr_native_unit_of_measurement = unit_of_measurement",
+)
+
+old = (
+    "        friendly_name = device_title.get(\"name\")\n"
+    "        if friendly_name:\n"
+)
+new = (
+    "        friendly_name = device_title.get(\"name\")\n"
+    "        if isinstance(friendly_name, str) and friendly_name.count(\":\") == 5:\n"
+    "            friendly_name = None\n"
+    "        if friendly_name:\n"
+)
+
+if old not in source:
+    raise RuntimeError("Expected LK sensor friendly_name block not found")
+
+source = source.replace(old, new, 1)
+path.write_text(source)
+PY
+        '';
 
         meta = {
           changelog = "https://github.com/angoyd/ha-lksystems/releases/tag/${version}";
@@ -418,6 +452,7 @@ PY
       "analytics"
       "default_config"
       "google_translate"
+      "homekit"
       "isal"
       "melcloud_home"
       "matter"
@@ -468,6 +503,112 @@ PY
           ];
           initial = "Normal";
           icon = "mdi:fan";
+        };
+      };
+
+      input_boolean = {
+        erv_ac_coordination_enabled = {
+          name = "ERV and AC Coordination";
+          initial = true;
+          icon = "mdi:air-conditioner";
+        };
+      };
+
+      input_number = {
+        cooling_start_temperature = {
+          name = "Cooling Start Temperature";
+          min = 20;
+          max = 30;
+          step = 0.5;
+          initial = 24;
+          unit_of_measurement = "C";
+          mode = "slider";
+          icon = "mdi:thermometer-high";
+        };
+        cooling_stop_temperature = {
+          name = "Cooling Stop Temperature";
+          min = 18;
+          max = 28;
+          step = 0.5;
+          initial = 23;
+          unit_of_measurement = "C";
+          mode = "slider";
+          icon = "mdi:thermometer-low";
+        };
+        ac_target_temperature_basement = {
+          name = "AC Target Basement";
+          min = 18;
+          max = 28;
+          step = 0.5;
+          initial = 22.5;
+          unit_of_measurement = "C";
+          mode = "slider";
+          icon = "mdi:home-thermometer-outline";
+        };
+        ac_target_temperature_main_floor = {
+          name = "AC Target Main Floor";
+          min = 18;
+          max = 28;
+          step = 0.5;
+          initial = 23.5;
+          unit_of_measurement = "C";
+          mode = "slider";
+          icon = "mdi:home-floor-0";
+        };
+        ac_sensor_offset_basement = {
+          name = "AC Sensor Offset Basement";
+          min = -5;
+          max = 8;
+          step = 0.5;
+          initial = 4;
+          unit_of_measurement = "C";
+          mode = "slider";
+          icon = "mdi:thermometer-chevron-up";
+        };
+        ac_sensor_offset_main_floor = {
+          name = "AC Sensor Offset Main Floor";
+          min = -5;
+          max = 8;
+          step = 0.5;
+          initial = 1;
+          unit_of_measurement = "C";
+          mode = "slider";
+          icon = "mdi:thermometer-chevron-up";
+        };
+        ac_hysteresis_on = {
+          name = "AC Hysteresis On";
+          min = 0.1;
+          max = 2;
+          step = 0.1;
+          initial = 0.4;
+          unit_of_measurement = "C";
+          mode = "slider";
+          icon = "mdi:chevron-up-circle-outline";
+        };
+        ac_hysteresis_off = {
+          name = "AC Hysteresis Off";
+          min = 0.1;
+          max = 2;
+          step = 0.1;
+          initial = 0.2;
+          unit_of_measurement = "C";
+          mode = "slider";
+          icon = "mdi:chevron-down-circle-outline";
+        };
+      };
+
+      input_text = {
+        ac_entity_id_basement = {
+          name = "AC Entity ID Basement";
+          max = 100;
+          initial = "";
+          icon = "mdi:identifier";
+        };
+        ac_entity_id_main_floor = {
+          name = "AC Entity ID Main Floor";
+          max = 100;
+          initial = "";
+          icon = "mdi:identifier";
         };
       };
 
@@ -626,6 +767,32 @@ PY
                 {{ x + y }}
               '';
             }
+            {
+              name = "AC Basement Command Setpoint";
+              unique_id = "ac_basement_command_setpoint";
+              unit_of_measurement = "C";
+              device_class = "temperature";
+              state = ''
+                {% set target = states('input_number.ac_target_temperature_basement') | float(22.5) %}
+                {% set offset = states('input_number.ac_sensor_offset_basement') | float(4) %}
+                {% set raw = target + offset %}
+                {% set rounded = ((raw * 2) | round(0)) / 2 %}
+                {{ [16, [31, rounded] | min] | max }}
+              '';
+            }
+            {
+              name = "AC Main Floor Command Setpoint";
+              unique_id = "ac_main_floor_command_setpoint";
+              unit_of_measurement = "C";
+              device_class = "temperature";
+              state = ''
+                {% set target = states('input_number.ac_target_temperature_main_floor') | float(23.5) %}
+                {% set offset = states('input_number.ac_sensor_offset_main_floor') | float(1) %}
+                {% set raw = target + offset %}
+                {% set rounded = ((raw * 2) | round(0)) / 2 %}
+                {{ [16, [31, rounded] | min] | max }}
+              '';
+            }
           ];
           binary_sensor = [
             {
@@ -647,6 +814,37 @@ PY
                   states('input_select.erv_mode') != 'Away'
                   and outdoor >= x
                   and outdoor <= max_t
+                }}
+              '';
+            }
+            {
+              name = "ERV Cooling Demand";
+              unique_id = "erv_cooling_demand";
+              availability = ''
+                {{
+                  has_value('sensor.erv_indoor_reference_temperature_smoothed')
+                  and has_value('input_number.cooling_start_temperature')
+                }}
+              '';
+              state = ''
+                {% set indoor = states('sensor.erv_indoor_reference_temperature_smoothed') | float(21) %}
+                {% set cool_start = states('input_number.cooling_start_temperature') | float(24) %}
+                {{ indoor >= cool_start }}
+              '';
+            }
+            {
+              name = "AC Any Cooling";
+              unique_id = "ac_any_cooling";
+              state = ''
+                {% set ac_b = states('input_text.ac_entity_id_basement') | trim %}
+                {% set ac_m = states('input_text.ac_entity_id_main_floor') | trim %}
+                {% set b_mode = states(ac_b) if ac_b | length > 0 else "" %}
+                {% set b_action = state_attr(ac_b, 'hvac_action') if ac_b | length > 0 else "" %}
+                {% set m_mode = states(ac_m) if ac_m | length > 0 else "" %}
+                {% set m_action = state_attr(ac_m, 'hvac_action') if ac_m | length > 0 else "" %}
+                {{
+                  b_mode == 'cool' or b_action == 'cooling'
+                  or m_mode == 'cool' or m_action == 'cooling'
                 }}
               '';
             }
@@ -924,6 +1122,349 @@ PY
           ];
         }
         {
+          id = "ac_two_zone_external_control";
+          alias = "AC: Two-zone external sensor control";
+          mode = "restart";
+          trigger = [
+            {
+              platform = "homeassistant";
+              event = "start";
+            }
+            {
+              platform = "time_pattern";
+              minutes = "/5";
+            }
+            {
+              platform = "state";
+              entity_id = [
+                "input_boolean.erv_ac_coordination_enabled"
+                "sensor.alpstuga_air_quality_monitor_temperature"
+                "sensor.alpstuga_air_quality_monitor_temperature_2"
+                "input_text.ac_entity_id_basement"
+                "input_text.ac_entity_id_main_floor"
+                "input_number.ac_target_temperature_basement"
+                "input_number.ac_target_temperature_main_floor"
+                "input_number.ac_sensor_offset_basement"
+                "input_number.ac_sensor_offset_main_floor"
+                "input_number.ac_hysteresis_on"
+                "input_number.ac_hysteresis_off"
+              ];
+            }
+          ];
+          condition = [
+            {
+              condition = "state";
+              entity_id = "input_boolean.erv_ac_coordination_enabled";
+              state = "on";
+            }
+          ];
+          action = [
+            {
+              variables = {
+                ac_basement = "{{ states('input_text.ac_entity_id_basement') | trim }}";
+                ac_main = "{{ states('input_text.ac_entity_id_main_floor') | trim }}";
+                basement_sensor = "{{ states('sensor.alpstuga_air_quality_monitor_temperature_2') | float(0) }}";
+                main_sensor = "{{ states('sensor.alpstuga_air_quality_monitor_temperature') | float(0) }}";
+                target_basement = "{{ states('input_number.ac_target_temperature_basement') | float(22.5) }}";
+                target_main = "{{ states('input_number.ac_target_temperature_main_floor') | float(23.5) }}";
+                on_h = "{{ states('input_number.ac_hysteresis_on') | float(0.4) }}";
+                off_h = "{{ states('input_number.ac_hysteresis_off') | float(0.2) }}";
+                command_basement = "{{ states('sensor.ac_basement_command_setpoint') | float(26.5) }}";
+                command_main = "{{ states('sensor.ac_main_floor_command_setpoint') | float(24.5) }}";
+                basement_on = "{{ basement_sensor | float >= (target_basement | float + on_h | float) }}";
+                basement_off = "{{ basement_sensor | float <= (target_basement | float - off_h | float) }}";
+                main_on = "{{ main_sensor | float >= (target_main | float + on_h | float) }}";
+                main_off = "{{ main_sensor | float <= (target_main | float - off_h | float) }}";
+              };
+            }
+            {
+              choose = [
+                {
+                  conditions = [
+                    {
+                      condition = "template";
+                      value_template = "{{ ac_basement | length > 0 and basement_on }}";
+                    }
+                  ];
+                  sequence = [
+                    {
+                      choose = [
+                        {
+                          conditions = [
+                            {
+                              condition = "template";
+                              value_template = "{{ states(ac_basement) != 'cool' }}";
+                            }
+                          ];
+                          sequence = [
+                            {
+                              service = "climate.set_hvac_mode";
+                              data = {
+                                entity_id = "{{ ac_basement }}";
+                                hvac_mode = "cool";
+                              };
+                            }
+                          ];
+                        }
+                      ];
+                    }
+                    {
+                      service = "climate.set_temperature";
+                      data = {
+                        entity_id = "{{ ac_basement }}";
+                        temperature = "{{ command_basement }}";
+                      };
+                    }
+                  ];
+                }
+                {
+                  conditions = [
+                    {
+                      condition = "template";
+                      value_template = "{{ ac_basement | length > 0 and basement_off and states(ac_basement) != 'off' }}";
+                    }
+                  ];
+                  sequence = [
+                    {
+                      service = "climate.turn_off";
+                      data.entity_id = "{{ ac_basement }}";
+                    }
+                  ];
+                }
+              ];
+            }
+            {
+              choose = [
+                {
+                  conditions = [
+                    {
+                      condition = "template";
+                      value_template = "{{ ac_main | length > 0 and main_on }}";
+                    }
+                  ];
+                  sequence = [
+                    {
+                      choose = [
+                        {
+                          conditions = [
+                            {
+                              condition = "template";
+                              value_template = "{{ states(ac_main) != 'cool' }}";
+                            }
+                          ];
+                          sequence = [
+                            {
+                              service = "climate.set_hvac_mode";
+                              data = {
+                                entity_id = "{{ ac_main }}";
+                                hvac_mode = "cool";
+                              };
+                            }
+                          ];
+                        }
+                      ];
+                    }
+                    {
+                      service = "climate.set_temperature";
+                      data = {
+                        entity_id = "{{ ac_main }}";
+                        temperature = "{{ command_main }}";
+                      };
+                    }
+                  ];
+                }
+                {
+                  conditions = [
+                    {
+                      condition = "template";
+                      value_template = "{{ ac_main | length > 0 and main_off and states(ac_main) != 'off' }}";
+                    }
+                  ];
+                  sequence = [
+                    {
+                      service = "climate.turn_off";
+                      data.entity_id = "{{ ac_main }}";
+                    }
+                  ];
+                }
+              ];
+            }
+          ];
+        }
+        {
+          id = "erv_ac_staged_cooling";
+          alias = "ERV: Stage free cooling and AC";
+          mode = "restart";
+          trigger = [
+            {
+              platform = "homeassistant";
+              event = "start";
+            }
+            {
+              platform = "time_pattern";
+              minutes = "/5";
+            }
+            {
+              platform = "state";
+              entity_id = [
+                "binary_sensor.erv_bypass_cooling_window_matched"
+                "sensor.erv_indoor_reference_temperature_smoothed"
+                "input_boolean.erv_ac_coordination_enabled"
+                "input_number.cooling_start_temperature"
+                "input_number.cooling_stop_temperature"
+                "binary_sensor.ac_any_cooling"
+              ];
+            }
+            {
+              platform = "numeric_state";
+              entity_id = "sensor.erv_indoor_reference_temperature_smoothed";
+              above = 24;
+              for = "00:20:00";
+            }
+            {
+              platform = "numeric_state";
+              entity_id = "sensor.erv_indoor_reference_temperature_smoothed";
+              below = 23;
+              for = "00:10:00";
+            }
+          ];
+          condition = [
+            {
+              condition = "state";
+              entity_id = "input_boolean.erv_ac_coordination_enabled";
+              state = "on";
+            }
+          ];
+          action = [
+            {
+              variables = {
+                indoor = "{{ states('sensor.erv_indoor_reference_temperature_smoothed') | float(21) }}";
+                cool_start = "{{ states('input_number.cooling_start_temperature') | float(24) }}";
+                cool_stop = "{{ states('input_number.cooling_stop_temperature') | float(23) }}";
+                bypass_ok = "{{ is_state('binary_sensor.erv_bypass_cooling_window_matched', 'on') }}";
+                ac_cooling = "{{ is_state('binary_sensor.ac_any_cooling', 'on') }}";
+                poor_air = ''
+                  {{
+                    states('sensor.alpstuga_air_quality_monitor_carbon_dioxide') | float(0) > 900
+                    or states('sensor.alpstuga_air_quality_monitor_carbon_dioxide_2') | float(0) > 900
+                    or states('sensor.alpstuga_air_quality_monitor_humidity_2') | float(0) > 70
+                  }}
+                '';
+              };
+            }
+            {
+              choose = [
+                {
+                  conditions = [
+                    {
+                      condition = "template";
+                      value_template = "{{ poor_air }}";
+                    }
+                  ];
+                  sequence = [
+                    {
+                      service = "input_select.select_option";
+                      target.entity_id = "input_select.erv_mode";
+                      data.option = "Boost";
+                    }
+                  ];
+                }
+                {
+                  conditions = [
+                    {
+                      condition = "template";
+                      value_template = ''
+                        {{
+                          not poor_air
+                          and indoor | float >= cool_start | float
+                          and bypass_ok
+                          and not ac_cooling
+                        }}
+                      '';
+                    }
+                  ];
+                  sequence = [
+                    {
+                      service = "input_select.select_option";
+                      target.entity_id = "input_select.erv_mode";
+                      data.option = "Normal";
+                    }
+                  ];
+                }
+                {
+                  conditions = [
+                    {
+                      condition = "template";
+                      value_template = ''
+                        {{
+                          indoor | float >= cool_start | float
+                          and not bypass_ok
+                          and ac_cooling
+                        }}
+                      '';
+                    }
+                  ];
+                  sequence = [
+                    {
+                      choose = [
+                        {
+                          conditions = [
+                            {
+                              condition = "template";
+                              value_template = "{{ not poor_air }}";
+                            }
+                          ];
+                          sequence = [
+                            {
+                              service = "input_select.select_option";
+                              target.entity_id = "input_select.erv_mode";
+                              data.option = "Quiet";
+                            }
+                          ];
+                        }
+                      ];
+                    }
+                  ];
+                }
+                {
+                  conditions = [
+                    {
+                      condition = "template";
+                      value_template = ''
+                        {{
+                          indoor | float <= cool_stop | float
+                          and states('input_select.erv_mode') == 'Quiet'
+                        }}
+                      '';
+                    }
+                  ];
+                  sequence = [
+                    {
+                      choose = [
+                        {
+                          conditions = [
+                            {
+                              condition = "template";
+                              value_template = "{{ not poor_air and states('input_select.erv_mode') == 'Quiet' }}";
+                            }
+                          ];
+                          sequence = [
+                            {
+                              service = "input_select.select_option";
+                              target.entity_id = "input_select.erv_mode";
+                              data.option = "Normal";
+                            }
+                          ];
+                        }
+                      ];
+                    }
+                  ];
+                }
+              ];
+            }
+          ];
+        }
+        {
           id = "erv_bypass_window_auto";
           alias = "ERV: Auto-set bypass window from indoor temps";
           mode = "restart";
@@ -1023,6 +1564,10 @@ PY
     80
     443
     8123
+    21063
+  ];
+  networking.firewall.allowedUDPPorts = [
+    5353
   ];
   # Open ports in the firewall.
   # networking.firewall.allowedTCPPorts = [ ... ];
