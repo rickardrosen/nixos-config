@@ -507,8 +507,13 @@ PY
       };
 
       input_boolean = {
-        erv_ac_coordination_enabled = {
-          name = "ERV and AC Coordination";
+        ac_cooling_enabled = {
+          # Seasonal / manual master switch for the AC units.
+          # on  = maintain continuous cooling (units held in `cool` at the
+          #       sensor-corrected setpoint; inverter throttles to idle, never
+          #       fully stops for temperature).
+          # off = both units forced off and left off (winter / away).
+          name = "AC Cooling (season)";
           initial = true;
           icon = "mdi:air-conditioner";
         };
@@ -554,26 +559,6 @@ PY
           unit_of_measurement = "C";
           mode = "slider";
           icon = "mdi:thermometer-chevron-up";
-        };
-        ac_hysteresis_on = {
-          name = "AC Hysteresis On";
-          min = 0.1;
-          max = 2;
-          step = 0.1;
-          initial = 0.7;
-          unit_of_measurement = "C";
-          mode = "slider";
-          icon = "mdi:chevron-up-circle-outline";
-        };
-        ac_hysteresis_off = {
-          name = "AC Hysteresis Off";
-          min = 0.1;
-          max = 2;
-          step = 0.1;
-          initial = 1.5;
-          unit_of_measurement = "C";
-          mode = "slider";
-          icon = "mdi:chevron-down-circle-outline";
         };
       };
 
@@ -1065,8 +1050,20 @@ PY
           ];
         }
         {
-          id = "ac_two_zone_external_control";
-          alias = "AC: Two-zone external sensor control";
+          # Set-and-forget inverter modulation. Rather than turning the units
+          # on/off on a hysteresis band (which forces full compressor stop+start
+          # cycles), we hold both units in `cool` at the sensor-corrected setpoint
+          # and let the inverter throttle down to idle. This spares the compressor
+          # (starts/day -> ~1) and makes the AC defer to the ERV automatically:
+          # when bypass free-cooling / a cool night pulls the room to target, the
+          # unit idles on its own with no explicit coordination code.
+          #
+          # The only full "off" is the seasonal/manual master switch
+          # (input_boolean.ac_cooling_enabled). There is no temperature-based
+          # auto-off. The offset sliders calibrate the unit's wrong internal
+          # sensor so it idles when the real room is at target.
+          id = "ac_maintain_cool";
+          alias = "AC: Maintain continuous cooling";
           mode = "restart";
           trigger = [
             {
@@ -1075,218 +1072,113 @@ PY
             }
             {
               platform = "time_pattern";
-              minutes = "/5";
+              minutes = "/10";
             }
             {
               platform = "state";
               entity_id = [
-                "input_boolean.erv_ac_coordination_enabled"
-                "sensor.alpstuga_air_quality_monitor_temperature"
-                "sensor.alpstuga_air_quality_monitor_temperature_2"
+                "input_boolean.ac_cooling_enabled"
                 "input_number.ac_target_temperature_basement"
                 "input_number.ac_target_temperature_main_floor"
                 "input_number.ac_sensor_offset_basement"
                 "input_number.ac_sensor_offset_main_floor"
-                "input_number.ac_hysteresis_on"
-                "input_number.ac_hysteresis_off"
+                "sensor.ac_basement_command_setpoint"
+                "sensor.ac_main_floor_command_setpoint"
               ];
-            }
-          ];
-          condition = [
-            {
-              condition = "state";
-              entity_id = "input_boolean.erv_ac_coordination_enabled";
-              state = "on";
             }
           ];
           action = [
             {
               variables = {
-                ac_basement = "climate.basement_ac";
-                ac_main = "climate.living_room_ac";
-                basement_sensor = "{{ states('sensor.alpstuga_air_quality_monitor_temperature_2') | float(0) }}";
-                main_sensor = "{{ states('sensor.alpstuga_air_quality_monitor_temperature') | float(0) }}";
-                target_basement = "{{ states('input_number.ac_target_temperature_basement') | float(22.5) }}";
-                target_main = "{{ states('input_number.ac_target_temperature_main_floor') | float(23.5) }}";
-                on_h = "{{ states('input_number.ac_hysteresis_on') | float(0.4) }}";
-                off_h = "{{ states('input_number.ac_hysteresis_off') | float(0.2) }}";
-                command_basement = "{{ states('sensor.ac_basement_command_setpoint') | float(26.5) }}";
-                command_main = "{{ states('sensor.ac_main_floor_command_setpoint') | float(24.5) }}";
-                basement_on = "{{ basement_sensor | float >= (target_basement | float + on_h | float) }}";
-                basement_off = "{{ basement_sensor | float <= (target_basement | float - off_h | float) }}";
-                main_on = "{{ main_sensor | float >= (target_main | float + on_h | float) }}";
-                main_off = "{{ main_sensor | float <= (target_main | float - off_h | float) }}";
-                min_off_seconds = 600;
-                min_run_seconds = 1800;
-                basement_can_start = ''
-                  {% if ac_basement | length == 0 %}
-                    false
-                  {% else %}
-                    {% set ent = states.get(ac_basement) %}
-                    {% if ent is none %}
-                      false
-                    {% elif ent.state == 'off' %}
-                      {{ (as_timestamp(now()) - as_timestamp(ent.last_changed)) >= min_off_seconds }}
-                    {% else %}
-                      true
-                    {% endif %}
-                  {% endif %}
-                '';
-                basement_can_stop = ''
-                  {% if ac_basement | length == 0 %}
-                    false
-                  {% else %}
-                    {% set ent = states.get(ac_basement) %}
-                    {% if ent is none %}
-                      false
-                    {% elif ent.state == 'cool' %}
-                      {{ (as_timestamp(now()) - as_timestamp(ent.last_changed)) >= min_run_seconds }}
-                    {% else %}
-                      true
-                    {% endif %}
-                  {% endif %}
-                '';
-                main_can_start = ''
-                  {% if ac_main | length == 0 %}
-                    false
-                  {% else %}
-                    {% set ent = states.get(ac_main) %}
-                    {% if ent is none %}
-                      false
-                    {% elif ent.state == 'off' %}
-                      {{ (as_timestamp(now()) - as_timestamp(ent.last_changed)) >= min_off_seconds }}
-                    {% else %}
-                      true
-                    {% endif %}
-                  {% endif %}
-                '';
-                main_can_stop = ''
-                  {% if ac_main | length == 0 %}
-                    false
-                  {% else %}
-                    {% set ent = states.get(ac_main) %}
-                    {% if ent is none %}
-                      false
-                    {% elif ent.state == 'cool' %}
-                      {{ (as_timestamp(now()) - as_timestamp(ent.last_changed)) >= min_run_seconds }}
-                    {% else %}
-                      true
-                    {% endif %}
-                  {% endif %}
+                cooling_enabled = "{{ is_state('input_boolean.ac_cooling_enabled', 'on') }}";
+                units = ''
+                  {{ [
+                     {'ac': 'climate.basement_ac',    'sp': states('sensor.ac_basement_command_setpoint')  | float(26.0)},
+                     {'ac': 'climate.living_room_ac', 'sp': states('sensor.ac_main_floor_command_setpoint') | float(24.5)}
+                  ] }}
                 '';
               };
             }
             {
-              choose = [
-                {
-                  conditions = [
-                    {
-                      condition = "template";
-                      value_template = "{{ ac_basement | length > 0 and basement_on and basement_can_start }}";
-                    }
-                  ];
-                  sequence = [
-                    {
-                      choose = [
-                        {
-                          conditions = [
-                            {
-                              condition = "template";
-                              value_template = "{{ states(ac_basement) != 'cool' }}";
-                            }
-                          ];
-                          sequence = [
-                            {
-                              service = "climate.set_hvac_mode";
-                              data = {
-                                entity_id = "{{ ac_basement }}";
-                                hvac_mode = "cool";
-                              };
-                            }
-                          ];
-                        }
-                      ];
-                    }
-                    {
-                      service = "climate.set_temperature";
-                      data = {
-                        entity_id = "{{ ac_basement }}";
-                        temperature = "{{ command_basement }}";
-                      };
-                    }
-                  ];
-                }
-                {
-                  conditions = [
-                    {
-                      condition = "template";
-                      value_template = "{{ ac_basement | length > 0 and basement_off and states(ac_basement) != 'off' and basement_can_stop }}";
-                    }
-                  ];
-                  sequence = [
-                    {
-                      service = "climate.turn_off";
-                      data.entity_id = "{{ ac_basement }}";
-                    }
-                  ];
-                }
-              ];
-            }
-            {
-              choose = [
-                {
-                  conditions = [
-                    {
-                      condition = "template";
-                      value_template = "{{ ac_main | length > 0 and main_on and main_can_start }}";
-                    }
-                  ];
-                  sequence = [
-                    {
-                      choose = [
-                        {
-                          conditions = [
-                            {
-                              condition = "template";
-                              value_template = "{{ states(ac_main) != 'cool' }}";
-                            }
-                          ];
-                          sequence = [
-                            {
-                              service = "climate.set_hvac_mode";
-                              data = {
-                                entity_id = "{{ ac_main }}";
-                                hvac_mode = "cool";
-                              };
-                            }
-                          ];
-                        }
-                      ];
-                    }
-                    {
-                      service = "climate.set_temperature";
-                      data = {
-                        entity_id = "{{ ac_main }}";
-                        temperature = "{{ command_main }}";
-                      };
-                    }
-                  ];
-                }
-                {
-                  conditions = [
-                    {
-                      condition = "template";
-                      value_template = "{{ ac_main | length > 0 and main_off and states(ac_main) != 'off' and main_can_stop }}";
-                    }
-                  ];
-                  sequence = [
-                    {
-                      service = "climate.turn_off";
-                      data.entity_id = "{{ ac_main }}";
-                    }
-                  ];
-                }
-              ];
+              repeat = {
+                for_each = "{{ units }}";
+                sequence = [
+                  {
+                    choose = [
+                      {
+                        # Season off -> ensure the unit is off.
+                        # Idempotent: only issues turn_off when a unit is actually on.
+                        conditions = [
+                          {
+                            condition = "template";
+                            value_template = "{{ not cooling_enabled and states(repeat.item.ac) not in ['off', 'unavailable', 'unknown'] }}";
+                          }
+                        ];
+                        sequence = [
+                          {
+                            service = "climate.turn_off";
+                            data.entity_id = "{{ repeat.item.ac }}";
+                          }
+                        ];
+                      }
+                      {
+                        # Season on -> ensure cool mode + corrected setpoint.
+                        conditions = [
+                          {
+                            condition = "template";
+                            value_template = "{{ cooling_enabled and states(repeat.item.ac) not in ['unavailable', 'unknown'] }}";
+                          }
+                        ];
+                        sequence = [
+                          {
+                            choose = [
+                              {
+                                conditions = [
+                                  {
+                                    condition = "template";
+                                    value_template = "{{ states(repeat.item.ac) != 'cool' }}";
+                                  }
+                                ];
+                                sequence = [
+                                  {
+                                    service = "climate.set_hvac_mode";
+                                    data = {
+                                      entity_id = "{{ repeat.item.ac }}";
+                                      hvac_mode = "cool";
+                                    };
+                                  }
+                                ];
+                              }
+                            ];
+                          }
+                          {
+                            # Write-on-change only, to keep MELCloud cloud traffic minimal.
+                            choose = [
+                              {
+                                conditions = [
+                                  {
+                                    condition = "template";
+                                    value_template = "{{ (state_attr(repeat.item.ac, 'temperature') | float(-99)) != repeat.item.sp }}";
+                                  }
+                                ];
+                                sequence = [
+                                  {
+                                    service = "climate.set_temperature";
+                                    data = {
+                                      entity_id = "{{ repeat.item.ac }}";
+                                      temperature = "{{ repeat.item.sp }}";
+                                    };
+                                  }
+                                ];
+                              }
+                            ];
+                          }
+                        ];
+                      }
+                    ];
+                  }
+                ];
+              };
             }
           ];
         }
