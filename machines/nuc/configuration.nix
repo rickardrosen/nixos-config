@@ -741,6 +741,36 @@ PY
                 {{ [16, [31, rounded] | min] | max }}
               '';
             }
+            {
+              # Promote the AC unit's hvac_action attribute to a first-class sensor
+              # state so it is recorded in history and can be graphed / counted.
+              # cooling = compressor working, idle = on but throttled to minimum,
+              # off = compressor stopped (the state we want to avoid cycling into).
+              name = "AC Basement Action";
+              unique_id = "ac_basement_action";
+              state = "{{ state_attr('climate.basement_ac', 'hvac_action') | default('unknown') }}";
+              icon = ''
+                {% set a = state_attr('climate.basement_ac', 'hvac_action') %}
+                {% if a == 'cooling' %}mdi:snowflake
+                {% elif a == 'idle' %}mdi:snowflake-off
+                {% elif a == 'off' %}mdi:power-off
+                {% else %}mdi:help-circle-outline
+                {% endif %}
+              '';
+            }
+            {
+              name = "AC Main Floor Action";
+              unique_id = "ac_main_floor_action";
+              state = "{{ state_attr('climate.living_room_ac', 'hvac_action') | default('unknown') }}";
+              icon = ''
+                {% set a = state_attr('climate.living_room_ac', 'hvac_action') %}
+                {% if a == 'cooling' %}mdi:snowflake
+                {% elif a == 'idle' %}mdi:snowflake-off
+                {% elif a == 'off' %}mdi:power-off
+                {% else %}mdi:help-circle-outline
+                {% endif %}
+              '';
+            }
           ];
         }
       ];
@@ -758,6 +788,50 @@ PY
               precision = 1;
             }
           ];
+        }
+        # Compressor-friendliness tracking. "Run Time Today" = hours the unit spent
+        # in cool mode; "Starts Today" = number of off->cool transitions (cycle count,
+        # want this low). Both are numeric, so they get long-term statistics and can be
+        # graphed over weeks to confirm the AC runs long and continuous, not cycling.
+        {
+          platform = "history_stats";
+          name = "AC Basement Run Time Today";
+          unique_id = "ac_basement_run_time_today";
+          entity_id = "climate.basement_ac";
+          state = "cool";
+          type = "time";
+          start = "{{ today_at() }}";
+          end = "{{ now() }}";
+        }
+        {
+          platform = "history_stats";
+          name = "AC Basement Starts Today";
+          unique_id = "ac_basement_starts_today";
+          entity_id = "climate.basement_ac";
+          state = "cool";
+          type = "count";
+          start = "{{ today_at() }}";
+          end = "{{ now() }}";
+        }
+        {
+          platform = "history_stats";
+          name = "AC Main Floor Run Time Today";
+          unique_id = "ac_main_floor_run_time_today";
+          entity_id = "climate.living_room_ac";
+          state = "cool";
+          type = "time";
+          start = "{{ today_at() }}";
+          end = "{{ now() }}";
+        }
+        {
+          platform = "history_stats";
+          name = "AC Main Floor Starts Today";
+          unique_id = "ac_main_floor_starts_today";
+          entity_id = "climate.living_room_ac";
+          state = "cool";
+          type = "count";
+          start = "{{ today_at() }}";
+          end = "{{ now() }}";
         }
       ];
 
