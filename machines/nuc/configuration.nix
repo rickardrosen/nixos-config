@@ -515,26 +515,6 @@ PY
       };
 
       input_number = {
-        cooling_start_temperature = {
-          name = "Cooling Start Temperature";
-          min = 20;
-          max = 30;
-          step = 0.5;
-          initial = 24;
-          unit_of_measurement = "C";
-          mode = "slider";
-          icon = "mdi:thermometer-high";
-        };
-        cooling_stop_temperature = {
-          name = "Cooling Stop Temperature";
-          min = 18;
-          max = 28;
-          step = 0.5;
-          initial = 23;
-          unit_of_measurement = "C";
-          mode = "slider";
-          icon = "mdi:thermometer-low";
-        };
         ac_target_temperature_basement = {
           name = "AC Target Basement";
           min = 18;
@@ -559,8 +539,8 @@ PY
           name = "AC Sensor Offset Basement";
           min = -5;
           max = 8;
-          step = 0.5;
-          initial = 4;
+          step = 0.1;
+          initial = 3.6;
           unit_of_measurement = "C";
           mode = "slider";
           icon = "mdi:thermometer-chevron-up";
@@ -569,8 +549,8 @@ PY
           name = "AC Sensor Offset Main Floor";
           min = -5;
           max = 8;
-          step = 0.5;
-          initial = 1;
+          step = 0.1;
+          initial = 1.4;
           unit_of_measurement = "C";
           mode = "slider";
           icon = "mdi:thermometer-chevron-up";
@@ -580,7 +560,7 @@ PY
           min = 0.1;
           max = 2;
           step = 0.1;
-          initial = 0.4;
+          initial = 0.7;
           unit_of_measurement = "C";
           mode = "slider";
           icon = "mdi:chevron-up-circle-outline";
@@ -590,25 +570,10 @@ PY
           min = 0.1;
           max = 2;
           step = 0.1;
-          initial = 0.2;
+          initial = 1.5;
           unit_of_measurement = "C";
           mode = "slider";
           icon = "mdi:chevron-down-circle-outline";
-        };
-      };
-
-      input_text = {
-        ac_entity_id_basement = {
-          name = "AC Entity ID Basement";
-          max = 100;
-          initial = "";
-          icon = "mdi:identifier";
-        };
-        ac_entity_id_main_floor = {
-          name = "AC Entity ID Main Floor";
-          max = 100;
-          initial = "";
-          icon = "mdi:identifier";
         };
       };
 
@@ -751,23 +716,6 @@ PY
               '';
             }
             {
-              name = "ERV Bypass Temperature Max";
-              unique_id = "erv_bypass_temperature_max";
-              unit_of_measurement = "C";
-              device_class = "temperature";
-              availability = ''
-                {{
-                  has_value('number.smart_erv_erv_bypass_start_temp_x')
-                  and has_value('number.smart_erv_erv_bypass_range_y')
-                }}
-              '';
-              state = ''
-                {% set x = states('number.smart_erv_erv_bypass_start_temp_x') | float %}
-                {% set y = states('number.smart_erv_erv_bypass_range_y') | float %}
-                {{ x + y }}
-              '';
-            }
-            {
               name = "AC Basement Command Setpoint";
               unique_id = "ac_basement_command_setpoint";
               unit_of_measurement = "C";
@@ -791,61 +739,6 @@ PY
                 {% set raw = target + offset %}
                 {% set rounded = ((raw * 2) | round(0)) / 2 %}
                 {{ [16, [31, rounded] | min] | max }}
-              '';
-            }
-          ];
-          binary_sensor = [
-            {
-              name = "ERV Bypass Cooling Window Matched";
-              unique_id = "erv_bypass_cooling_window_matched";
-              availability = ''
-                {{
-                  has_value('sensor.erv_outdoor_temperature')
-                  and has_value('number.smart_erv_erv_bypass_start_temp_x')
-                  and has_value('number.smart_erv_erv_bypass_range_y')
-                }}
-              '';
-              state = ''
-                {% set outdoor = states('sensor.erv_outdoor_temperature') | float(999) %}
-                {% set x = states('number.smart_erv_erv_bypass_start_temp_x') | float(999) %}
-                {% set y = states('number.smart_erv_erv_bypass_range_y') | float(0) %}
-                {% set max_t = x + y %}
-                {{
-                  states('input_select.erv_mode') != 'Away'
-                  and outdoor >= x
-                  and outdoor <= max_t
-                }}
-              '';
-            }
-            {
-              name = "ERV Cooling Demand";
-              unique_id = "erv_cooling_demand";
-              availability = ''
-                {{
-                  has_value('sensor.erv_indoor_reference_temperature_smoothed')
-                  and has_value('input_number.cooling_start_temperature')
-                }}
-              '';
-              state = ''
-                {% set indoor = states('sensor.erv_indoor_reference_temperature_smoothed') | float(21) %}
-                {% set cool_start = states('input_number.cooling_start_temperature') | float(24) %}
-                {{ indoor >= cool_start }}
-              '';
-            }
-            {
-              name = "AC Any Cooling";
-              unique_id = "ac_any_cooling";
-              state = ''
-                {% set ac_b = states('input_text.ac_entity_id_basement') | trim %}
-                {% set ac_m = states('input_text.ac_entity_id_main_floor') | trim %}
-                {% set b_mode = states(ac_b) if ac_b | length > 0 else "" %}
-                {% set b_action = state_attr(ac_b, 'hvac_action') if ac_b | length > 0 else "" %}
-                {% set m_mode = states(ac_m) if ac_m | length > 0 else "" %}
-                {% set m_action = state_attr(ac_m, 'hvac_action') if ac_m | length > 0 else "" %}
-                {{
-                  b_mode == 'cool' or b_action == 'cooling'
-                  or m_mode == 'cool' or m_action == 'cooling'
-                }}
               '';
             }
           ];
@@ -1140,8 +1033,6 @@ PY
                 "input_boolean.erv_ac_coordination_enabled"
                 "sensor.alpstuga_air_quality_monitor_temperature"
                 "sensor.alpstuga_air_quality_monitor_temperature_2"
-                "input_text.ac_entity_id_basement"
-                "input_text.ac_entity_id_main_floor"
                 "input_number.ac_target_temperature_basement"
                 "input_number.ac_target_temperature_main_floor"
                 "input_number.ac_sensor_offset_basement"
@@ -1161,8 +1052,8 @@ PY
           action = [
             {
               variables = {
-                ac_basement = "{{ states('input_text.ac_entity_id_basement') | trim }}";
-                ac_main = "{{ states('input_text.ac_entity_id_main_floor') | trim }}";
+                ac_basement = "climate.basement_ac";
+                ac_main = "climate.living_room_ac";
                 basement_sensor = "{{ states('sensor.alpstuga_air_quality_monitor_temperature_2') | float(0) }}";
                 main_sensor = "{{ states('sensor.alpstuga_air_quality_monitor_temperature') | float(0) }}";
                 target_basement = "{{ states('input_number.ac_target_temperature_basement') | float(22.5) }}";
@@ -1175,6 +1066,64 @@ PY
                 basement_off = "{{ basement_sensor | float <= (target_basement | float - off_h | float) }}";
                 main_on = "{{ main_sensor | float >= (target_main | float + on_h | float) }}";
                 main_off = "{{ main_sensor | float <= (target_main | float - off_h | float) }}";
+                min_off_seconds = 600;
+                min_run_seconds = 1800;
+                basement_can_start = ''
+                  {% if ac_basement | length == 0 %}
+                    false
+                  {% else %}
+                    {% set ent = states.get(ac_basement) %}
+                    {% if ent is none %}
+                      false
+                    {% elif ent.state == 'off' %}
+                      {{ (as_timestamp(now()) - as_timestamp(ent.last_changed)) >= min_off_seconds }}
+                    {% else %}
+                      true
+                    {% endif %}
+                  {% endif %}
+                '';
+                basement_can_stop = ''
+                  {% if ac_basement | length == 0 %}
+                    false
+                  {% else %}
+                    {% set ent = states.get(ac_basement) %}
+                    {% if ent is none %}
+                      false
+                    {% elif ent.state == 'cool' %}
+                      {{ (as_timestamp(now()) - as_timestamp(ent.last_changed)) >= min_run_seconds }}
+                    {% else %}
+                      true
+                    {% endif %}
+                  {% endif %}
+                '';
+                main_can_start = ''
+                  {% if ac_main | length == 0 %}
+                    false
+                  {% else %}
+                    {% set ent = states.get(ac_main) %}
+                    {% if ent is none %}
+                      false
+                    {% elif ent.state == 'off' %}
+                      {{ (as_timestamp(now()) - as_timestamp(ent.last_changed)) >= min_off_seconds }}
+                    {% else %}
+                      true
+                    {% endif %}
+                  {% endif %}
+                '';
+                main_can_stop = ''
+                  {% if ac_main | length == 0 %}
+                    false
+                  {% else %}
+                    {% set ent = states.get(ac_main) %}
+                    {% if ent is none %}
+                      false
+                    {% elif ent.state == 'cool' %}
+                      {{ (as_timestamp(now()) - as_timestamp(ent.last_changed)) >= min_run_seconds }}
+                    {% else %}
+                      true
+                    {% endif %}
+                  {% endif %}
+                '';
               };
             }
             {
@@ -1183,7 +1132,7 @@ PY
                   conditions = [
                     {
                       condition = "template";
-                      value_template = "{{ ac_basement | length > 0 and basement_on }}";
+                      value_template = "{{ ac_basement | length > 0 and basement_on and basement_can_start }}";
                     }
                   ];
                   sequence = [
@@ -1221,7 +1170,7 @@ PY
                   conditions = [
                     {
                       condition = "template";
-                      value_template = "{{ ac_basement | length > 0 and basement_off and states(ac_basement) != 'off' }}";
+                      value_template = "{{ ac_basement | length > 0 and basement_off and states(ac_basement) != 'off' and basement_can_stop }}";
                     }
                   ];
                   sequence = [
@@ -1239,7 +1188,7 @@ PY
                   conditions = [
                     {
                       condition = "template";
-                      value_template = "{{ ac_main | length > 0 and main_on }}";
+                      value_template = "{{ ac_main | length > 0 and main_on and main_can_start }}";
                     }
                   ];
                   sequence = [
@@ -1277,186 +1226,13 @@ PY
                   conditions = [
                     {
                       condition = "template";
-                      value_template = "{{ ac_main | length > 0 and main_off and states(ac_main) != 'off' }}";
+                      value_template = "{{ ac_main | length > 0 and main_off and states(ac_main) != 'off' and main_can_stop }}";
                     }
                   ];
                   sequence = [
                     {
                       service = "climate.turn_off";
                       data.entity_id = "{{ ac_main }}";
-                    }
-                  ];
-                }
-              ];
-            }
-          ];
-        }
-        {
-          id = "erv_ac_staged_cooling";
-          alias = "ERV: Stage free cooling and AC";
-          mode = "restart";
-          trigger = [
-            {
-              platform = "homeassistant";
-              event = "start";
-            }
-            {
-              platform = "time_pattern";
-              minutes = "/5";
-            }
-            {
-              platform = "state";
-              entity_id = [
-                "binary_sensor.erv_bypass_cooling_window_matched"
-                "sensor.erv_indoor_reference_temperature_smoothed"
-                "input_boolean.erv_ac_coordination_enabled"
-                "input_number.cooling_start_temperature"
-                "input_number.cooling_stop_temperature"
-                "binary_sensor.ac_any_cooling"
-              ];
-            }
-            {
-              platform = "numeric_state";
-              entity_id = "sensor.erv_indoor_reference_temperature_smoothed";
-              above = 24;
-              for = "00:20:00";
-            }
-            {
-              platform = "numeric_state";
-              entity_id = "sensor.erv_indoor_reference_temperature_smoothed";
-              below = 23;
-              for = "00:10:00";
-            }
-          ];
-          condition = [
-            {
-              condition = "state";
-              entity_id = "input_boolean.erv_ac_coordination_enabled";
-              state = "on";
-            }
-          ];
-          action = [
-            {
-              variables = {
-                indoor = "{{ states('sensor.erv_indoor_reference_temperature_smoothed') | float(21) }}";
-                cool_start = "{{ states('input_number.cooling_start_temperature') | float(24) }}";
-                cool_stop = "{{ states('input_number.cooling_stop_temperature') | float(23) }}";
-                bypass_ok = "{{ is_state('binary_sensor.erv_bypass_cooling_window_matched', 'on') }}";
-                ac_cooling = "{{ is_state('binary_sensor.ac_any_cooling', 'on') }}";
-                poor_air = ''
-                  {{
-                    states('sensor.alpstuga_air_quality_monitor_carbon_dioxide') | float(0) > 900
-                    or states('sensor.alpstuga_air_quality_monitor_carbon_dioxide_2') | float(0) > 900
-                    or states('sensor.alpstuga_air_quality_monitor_humidity_2') | float(0) > 70
-                  }}
-                '';
-              };
-            }
-            {
-              choose = [
-                {
-                  conditions = [
-                    {
-                      condition = "template";
-                      value_template = "{{ poor_air }}";
-                    }
-                  ];
-                  sequence = [
-                    {
-                      service = "input_select.select_option";
-                      target.entity_id = "input_select.erv_mode";
-                      data.option = "Boost";
-                    }
-                  ];
-                }
-                {
-                  conditions = [
-                    {
-                      condition = "template";
-                      value_template = ''
-                        {{
-                          not poor_air
-                          and indoor | float >= cool_start | float
-                          and bypass_ok
-                          and not ac_cooling
-                        }}
-                      '';
-                    }
-                  ];
-                  sequence = [
-                    {
-                      service = "input_select.select_option";
-                      target.entity_id = "input_select.erv_mode";
-                      data.option = "Normal";
-                    }
-                  ];
-                }
-                {
-                  conditions = [
-                    {
-                      condition = "template";
-                      value_template = ''
-                        {{
-                          indoor | float >= cool_start | float
-                          and not bypass_ok
-                          and ac_cooling
-                        }}
-                      '';
-                    }
-                  ];
-                  sequence = [
-                    {
-                      choose = [
-                        {
-                          conditions = [
-                            {
-                              condition = "template";
-                              value_template = "{{ not poor_air }}";
-                            }
-                          ];
-                          sequence = [
-                            {
-                              service = "input_select.select_option";
-                              target.entity_id = "input_select.erv_mode";
-                              data.option = "Quiet";
-                            }
-                          ];
-                        }
-                      ];
-                    }
-                  ];
-                }
-                {
-                  conditions = [
-                    {
-                      condition = "template";
-                      value_template = ''
-                        {{
-                          indoor | float <= cool_stop | float
-                          and states('input_select.erv_mode') == 'Quiet'
-                        }}
-                      '';
-                    }
-                  ];
-                  sequence = [
-                    {
-                      choose = [
-                        {
-                          conditions = [
-                            {
-                              condition = "template";
-                              value_template = "{{ not poor_air and states('input_select.erv_mode') == 'Quiet' }}";
-                            }
-                          ];
-                          sequence = [
-                            {
-                              service = "input_select.select_option";
-                              target.entity_id = "input_select.erv_mode";
-                              data.option = "Normal";
-                            }
-                          ];
-                        }
-                      ];
                     }
                   ];
                 }

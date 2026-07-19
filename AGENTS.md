@@ -138,7 +138,76 @@ Key installed packages:
 ## Machine: NUC
 
 **Location**: `machines/nuc/`
-(Details to be documented)
+
+The NUC is the always-on home server. Besides being a Sway desktop, it runs the
+smart-home stack: Home Assistant (`services.home-assistant`), the Matter server
+(`services.matter-server`), and a Caddy reverse proxy exposing HA at
+`https://gg26c.duckdns.org` (external, DuckDNS) and `http://nuc.local` (internal).
+
+### Home Assistant — climate control
+
+The entire HA setup lives inline in `machines/nuc/configuration.nix` under
+`services.home-assistant.config` (helpers, template sensors, scripts, automations).
+
+**Guiding philosophy: cooling-only, and keep it simple.**
+Winter heat is handled by water-based subfloor heating on both floors and is **not**
+managed by HA — high-thermal-mass concrete walls hold heat easily. The house is SW-facing
+with large windows, so the real problem is summer cooling of the main floor (sun load) and
+the basement bedroom (heat leak from the adjacent heater/laundry room).
+
+**Hardware & integrations:**
+- **AC** — two Mitsubishi inverter heads via MELCloud (`melcloud_home` component):
+  `climate.basement_ac` and `climate.living_room_ac`. Cooling only. MELCloud is a laggy,
+  rate-limited **cloud** API, so control is set-and-hold (few writes), never rapid toggling.
+- **ERV** — Tuya-local (`localtuya`), exposes fan speeds and a heat-exchange **bypass**
+  driven by `number.smart_erv_erv_bypass_start_temp_x` (start temp X) and
+  `..._erv_bypass_range_y` (range Y). Bypass opens when outdoor air is in the cool band
+  `[X, X+Y]`, i.e. only when OA is below indoor → incoming air always *aids* cooling.
+- **Room sensors ("alpstuga")** — the source of truth for room temperature/humidity, since
+  the AC units' internal return-air sensors are miscalibrated:
+  - `sensor.alpstuga_air_quality_monitor_temperature` = **main floor**
+  - `sensor.alpstuga_air_quality_monitor_temperature_2` = **basement**
+  - `_2` variants of humidity / CO₂ / PM2.5 exist per location too.
+- **LK Systems** — water/leak system via a custom-built component (`lksystems`, patched at
+  build time in `configuration.nix`).
+
+**AC control model (offset + modulation, alpstuga as authority):**
+The AC setpoint is commanded as `room target + per-unit offset`
+(`ac_target_temperature_*` + `ac_sensor_offset_*`, offsets ≈ +4 basement / +1 main). The
+offset compensates for the miscalibrated internal sensor so the inverter modulates toward
+the true room target instead of short-cycling. HA then uses the alpstuga reading as a coarse
+on/off authority with dual hysteresis (`ac_hysteresis_on/off`) plus min-run (900s) / min-off
+(600s) timers to protect the compressor and minimise cloud calls. This all lives in the
+`ac_two_zone_external_control` automation.
+
+**ERV ↔ AC coordination:** none needed. Because the bypass window only opens when OA is
+cooler than indoor, free cooling and mechanical cooling always push the same direction — an
+earlier `erv_ac_staged_cooling` arbitration automation was removed as unnecessary
+complexity. The ERV bypass pre-cools the thermal mass on cool nights (OA usually drops below
+18°C); the AC handles daytime sun-load peaks.
+
+**Helpers (`input_*`):**
+- `input_boolean.erv_ac_coordination_enabled` — master enable for automated AC control.
+- `input_select.erv_mode` — Normal / Boost / Away / Quiet (mapped to fan speeds by
+  `script.erv_apply_mode`).
+- `input_number.ac_target_temperature_{basement,main_floor}` — desired room temps.
+- `input_number.ac_sensor_offset_{basement,main_floor}` — internal-sensor compensation.
+- `input_number.ac_hysteresis_{on,off}` — cooling on/off thresholds.
+
+**Automations:**
+- `ac_two_zone_external_control` — the two-zone AC cooling thermostat (see model above).
+- `erv_apply_mode_on_change` + `script.erv_apply_mode` — apply the selected ERV fan speed.
+- `erv_boost_on_poor_air` / `erv_recover_to_auto` / `erv_boost_timeout` — auto-Boost the ERV
+  on high CO₂ / PM2.5 / humidity, then recover; independent of cooling.
+- `erv_away_when_empty` / `erv_normal_when_occupied` — occupancy-based ERV mode via
+  `zone.home`.
+- `erv_bypass_window_auto` — computes bypass X/Y from indoor temps and writes them to the
+  Tuya ERV (write-on-change only, indoor-aware safety to disable bypass when already cool).
+
+**Verifying changes:** `nix eval .#nixosConfigurations.nuc.config.services.home-assistant.config`
+checks the config evaluates; deploy with `nixos-rebuild`; then in HA Developer Tools verify
+`climate.basement_ac` / `climate.living_room_ac` react and check Settings → Logs for template
+errors.
 
 ## Flake Configuration
 
