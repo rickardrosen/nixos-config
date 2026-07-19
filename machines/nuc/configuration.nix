@@ -692,30 +692,6 @@ PY
               '';
             }
             {
-              name = "ERV Outdoor Temperature";
-              unique_id = "erv_outdoor_temperature";
-              unit_of_measurement = "C";
-              device_class = "temperature";
-              availability = ''
-                {{
-                  has_value('sensor.smart_erv_oa_temperature')
-                  or has_value('sensor.smart_erv_temp_outdoor')
-                  or has_value('sensor.smart_erv_outdoor_temperature')
-                }}
-              '';
-              state = ''
-                {% if has_value('sensor.smart_erv_oa_temperature') %}
-                  {{ states('sensor.smart_erv_oa_temperature') | float }}
-                {% elif has_value('sensor.smart_erv_temp_outdoor') %}
-                  {{ states('sensor.smart_erv_temp_outdoor') | float }}
-                {% elif has_value('sensor.smart_erv_outdoor_temperature') %}
-                  {{ states('sensor.smart_erv_outdoor_temperature') | float }}
-                {% else %}
-                  {{ none }}
-                {% endif %}
-              '';
-            }
-            {
               name = "AC Basement Command Setpoint";
               unique_id = "ac_basement_command_setpoint";
               unit_of_measurement = "C";
