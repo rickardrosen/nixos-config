@@ -786,6 +786,36 @@ PY
         }
       ];
 
+      binary_sensor = [
+        {
+          # Short-cycling early-warning: turns on when a unit's rolling 60-min compressor
+          # start count is RISING (positive least-squares gradient over ~2h). Reads
+          # sensor.ac_*_starts_last_hour, which goes up AND down so its slope is
+          # meaningful (starts_today only ever rises, so it's unsuitable as a trend
+          # source). min_gradient is in units/sec and almost certainly needs tuning to
+          # your data: higher = less sensitive. device_class "problem" -> shows red when on.
+          platform = "trend";
+          sensors = {
+            ac_main_floor_short_cycling = {
+              friendly_name = "Living Room short-cycling";
+              entity_id = "sensor.ac_main_floor_starts_last_hour";
+              sample_duration = 7200;
+              max_samples = 20;
+              min_gradient = 0.0005;
+              device_class = "problem";
+            };
+            ac_basement_short_cycling = {
+              friendly_name = "Basement short-cycling";
+              entity_id = "sensor.ac_basement_starts_last_hour";
+              sample_duration = 7200;
+              max_samples = 20;
+              min_gradient = 0.0005;
+              device_class = "problem";
+            };
+          };
+        }
+      ];
+
       automation = [
         {
           id = "erv_apply_mode_on_change";
