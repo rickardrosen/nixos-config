@@ -1031,22 +1031,36 @@ PY
               platform = "time_pattern";
               minutes = "/30";
             }
+            {
+              # Re-evaluate promptly when the living-room AC target changes.
+              platform = "template";
+              value_template = "{{ state_attr('climate.living_room', 'temperature') }}";
+            }
           ];
           action = [
             {
               variables = {
-                # Cooling-only strategy:
-                # - Disable bypass when indoor is already cool.
-                # - Otherwise allow bypass only when OA is a few degrees below indoor.
+                # Cooling-only strategy, coordinated with the AC target and outdoor temp.
+                # Engage the bypass window (an enabling X) ONLY when BOTH:
+                #   - demand: living room is above its AC target (climate.living_room), and
+                #   - free:   outdoor is genuinely cooler than indoor (real free cooling).
+                # Otherwise disable (X=30). The enabling X reuses the prior `indoor - 4`
+                # value, so this change only ever *restricts* bypass to genuine free-cooling
+                # windows -- it can't create new behaviour whatever the exact X semantics.
+                # OA unavailable -> treated as free (defer to the ERV MCU's own check) so a
+                # sensor dropout doesn't freeze the bypass shut. Target falls back to 23 C
+                # until climate.living_room exists.
                 target_x = ''
-                  {% set indoor_raw = states('sensor.erv_indoor_reference_temperature') | float(21) %}
-                  {% set indoor_smooth = states('sensor.erv_indoor_reference_temperature_smoothed') | float(indoor_raw) %}
-                  {% set indoor = (indoor_raw * 0.3) + (indoor_smooth * 0.7) %}
-                  {% if indoor <= 20.5 %}
-                    30
-                  {% else %}
+                  {% set target = state_attr('climate.living_room', 'temperature') | float(23) %}
+                  {% set indoor = states('sensor.ac_main_floor_control_temperature') | float(target) %}
+                  {% set oa = states('sensor.smart_erv_outdoor_temperature') | float(-999) %}
+                  {% set demand = indoor > target + 0.3 %}
+                  {% set free = (oa == -999) or (oa < indoor - 1.5) %}
+                  {% if demand and free %}
                     {% set x = (indoor - 4) | round(0, 'floor') %}
                     {{ [15, [30, x] | min] | max }}
+                  {% else %}
+                    30
                   {% endif %}
                 '';
                 target_y = 2;
