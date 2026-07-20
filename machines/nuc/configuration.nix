@@ -761,6 +761,29 @@ PY
           start = "{{ today_at() }}";
           end = "{{ now() }}";
         }
+        # Rolling 60-min compressor spin-up count -- for spotting short-cycling in real
+        # time while tuning VT, without waiting for the daily bar to fill. A quiet,
+        # well-tuned unit should read 0-1 here most of the time.
+        {
+          platform = "history_stats";
+          name = "AC Basement Starts Last Hour";
+          unique_id = "ac_basement_starts_last_hour";
+          entity_id = "sensor.ac_basement_action";
+          state = "cooling";
+          type = "count";
+          start = "{{ now() - timedelta(hours=1) }}";
+          end = "{{ now() }}";
+        }
+        {
+          platform = "history_stats";
+          name = "AC Main Floor Starts Last Hour";
+          unique_id = "ac_main_floor_starts_last_hour";
+          entity_id = "sensor.ac_main_floor_action";
+          state = "cooling";
+          type = "count";
+          start = "{{ now() - timedelta(hours=1) }}";
+          end = "{{ now() }}";
+        }
       ];
 
       automation = [
