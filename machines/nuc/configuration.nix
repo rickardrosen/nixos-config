@@ -535,7 +535,7 @@ PY
           min = 18;
           max = 28;
           step = 0.5;
-          initial = 23.5;
+          initial = 22.5;
           unit_of_measurement = "C";
           mode = "slider";
           icon = "mdi:home-floor-0";
@@ -708,7 +708,7 @@ PY
               unit_of_measurement = "C";
               device_class = "temperature";
               state = ''
-                {% set target = states('input_number.ac_target_temperature_main_floor') | float(23.5) %}
+                {% set target = states('input_number.ac_target_temperature_main_floor') | float(22.5) %}
                 {% set room = states('sensor.ac_main_floor_control_temperature') | float(-999) %}
                 {% set unit = state_attr('climate.living_room_ac', 'current_temperature') | float(-999) %}
                 {% if room == -999 or unit == -999 %}
