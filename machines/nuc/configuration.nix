@@ -713,16 +713,20 @@ PY
             }
           ];
         }
-        # Compressor-friendliness tracking. "Run Time Today" = hours the unit spent
-        # in cool mode; "Starts Today" = number of off->cool transitions (cycle count,
-        # want this low). Both are numeric, so they get long-term statistics and can be
-        # graphed over weeks to confirm the AC runs long and continuous, not cycling.
+        # Compressor-friendliness tracking. Measured off hvac_action (via the
+        # sensor.ac_*_action promotion), NOT the hvac mode: under Versatile Thermostat
+        # the unit is held in `cool` continuously and only the compressor modulates, so
+        # mode-based stats are useless. "Run Time Today" = hours the compressor actually
+        # ran (action == cooling); "Starts Today" = number of idle/off->cooling
+        # transitions == compressor spin-ups (want this LOW). Both are numeric, so they
+        # get long-term statistics and can be graphed over weeks; view the daily values
+        # on a Statistics graph card and ignore days you were editing/rebuilding config.
         {
           platform = "history_stats";
           name = "AC Basement Run Time Today";
           unique_id = "ac_basement_run_time_today";
-          entity_id = "climate.basement_ac";
-          state = "cool";
+          entity_id = "sensor.ac_basement_action";
+          state = "cooling";
           type = "time";
           start = "{{ today_at() }}";
           end = "{{ now() }}";
@@ -731,8 +735,8 @@ PY
           platform = "history_stats";
           name = "AC Basement Starts Today";
           unique_id = "ac_basement_starts_today";
-          entity_id = "climate.basement_ac";
-          state = "cool";
+          entity_id = "sensor.ac_basement_action";
+          state = "cooling";
           type = "count";
           start = "{{ today_at() }}";
           end = "{{ now() }}";
@@ -741,8 +745,8 @@ PY
           platform = "history_stats";
           name = "AC Main Floor Run Time Today";
           unique_id = "ac_main_floor_run_time_today";
-          entity_id = "climate.living_room_ac";
-          state = "cool";
+          entity_id = "sensor.ac_main_floor_action";
+          state = "cooling";
           type = "time";
           start = "{{ today_at() }}";
           end = "{{ now() }}";
@@ -751,8 +755,8 @@ PY
           platform = "history_stats";
           name = "AC Main Floor Starts Today";
           unique_id = "ac_main_floor_starts_today";
-          entity_id = "climate.living_room_ac";
-          state = "cool";
+          entity_id = "sensor.ac_main_floor_action";
+          state = "cooling";
           type = "count";
           start = "{{ today_at() }}";
           end = "{{ now() }}";
