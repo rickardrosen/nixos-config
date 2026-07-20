@@ -662,6 +662,27 @@ PY
                 {% endif %}
               '';
             }
+            {
+              # Exposes the living-room ALPSTUGA temperature's last-update time as a
+              # timestamp sensor, so it can be selected in each Versatile Thermostat's
+              # "Last seen room temperature datetime" field. It advances every time the
+              # sensor reports (~30s for this Matter device) and freezes only if the
+              # sensor genuinely stops -> honest liveness for VT's safety check. Optional
+              # belt-and-suspenders: the alpstuga rarely goes stale, but this makes VT's
+              # safety detection correct rather than relying on VT's internal timing.
+              name = "AC Main Floor Room Temp Last Seen";
+              unique_id = "ac_main_floor_room_temp_last_seen";
+              device_class = "timestamp";
+              availability = "{{ has_value('sensor.alpstuga_air_quality_monitor_temperature') }}";
+              state = "{{ states.sensor.alpstuga_air_quality_monitor_temperature.last_updated }}";
+            }
+            {
+              name = "AC Basement Room Temp Last Seen";
+              unique_id = "ac_basement_room_temp_last_seen";
+              device_class = "timestamp";
+              availability = "{{ has_value('sensor.alpstuga_air_quality_monitor_temperature_2') }}";
+              state = "{{ states.sensor.alpstuga_air_quality_monitor_temperature_2.last_updated }}";
+            }
           ];
         }
       ];
