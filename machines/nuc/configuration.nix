@@ -400,6 +400,12 @@ PY
     extraPackages = ps: [ ps.aiomelcloudhome ];
     customComponents = with pkgs.home-assistant-custom-components; [
       localtuya
+      # Versatile Thermostat: wraps each MELCloud AC (over_climate) + an external
+      # room sensor into a proper climate entity with auto-regulation. Configured via
+      # the HA UI (Settings -> Devices & Services), so its config lives in .storage,
+      # not here. Replaces the hand-rolled command-setpoint templates + ac_maintain_cool
+      # loop once set up (disable that automation at cutover to avoid two controllers).
+      versatile_thermostat
       (pkgs.buildHomeAssistantComponent rec {
         owner = "angoyd";
         domain = "lksystems";
@@ -506,47 +512,10 @@ PY
         };
       };
 
-      input_boolean = {
-        ac_cooling_enabled = {
-          # Seasonal / manual master switch for the AC units.
-          # on  = maintain continuous cooling (units held in `cool` at the
-          #       sensor-corrected setpoint; inverter throttles to idle, never
-          #       fully stops for temperature).
-          # off = both units forced off and left off (winter / away).
-          name = "AC Cooling (season)";
-          initial = true;
-          icon = "mdi:air-conditioner";
-        };
-      };
-
-      input_number = {
-        ac_target_temperature_basement = {
-          name = "AC Target Basement";
-          min = 18;
-          max = 28;
-          step = 0.5;
-          initial = 22.5;
-          unit_of_measurement = "C";
-          mode = "slider";
-          icon = "mdi:home-thermometer-outline";
-        };
-        ac_target_temperature_main_floor = {
-          name = "AC Target Main Floor";
-          min = 18;
-          max = 28;
-          step = 0.5;
-          initial = 22.5;
-          unit_of_measurement = "C";
-          mode = "slider";
-          icon = "mdi:home-floor-0";
-        };
-        # No sensor-offset/trim sliders: both units are closed-loop off their own
-        # occupied-zone sensor (sensor.ac_*_control_temperature) and settle at their
-        # target slider directly. The unit's internal-sensor error (basement reads
-        # high on its hot wall; main floor reads low from over-cooling its own bubble)
-        # is cancelled live by the command-setpoint formula, so no static offset is
-        # needed in either direction.
-      };
+      # AC target temperatures, the seasonal on/off, and the closed-loop control that
+      # used to live here (input_number targets + command-setpoint templates +
+      # ac_maintain_cool) all moved to Versatile Thermostat, configured in the HA UI.
+      # Each room's target and on/off now live on its climate.* VT entity.
 
       script = {
         erv_apply_mode = {
@@ -660,67 +629,6 @@ PY
                 {% else %}
                   {{ none }}
                 {% endif %}
-              '';
-            }
-            {
-              # Closed loop off the basement occupied-zone sensor, same model as the
-              # main floor. The basement unit sits on a hot wall so its internal sensor
-              # reads HIGH; the formula cancels that live via the unit's own reading:
-              #     C = unit_internal_temp + (target - room)
-              # -> the inner loop sees error (room - target), idling when the real
-              # basement reaches target. Steady state -> room = target (set via the AC
-              # Target Basement slider). No static offset needed.
-              name = "AC Basement Command Setpoint";
-              unique_id = "ac_basement_command_setpoint";
-              unit_of_measurement = "C";
-              device_class = "temperature";
-              state = ''
-                {% set target = states('input_number.ac_target_temperature_basement') | float(22.5) %}
-                {% set room = states('sensor.ac_basement_control_temperature') | float(-999) %}
-                {% set unit = state_attr('climate.basement_ac', 'current_temperature') | float(-999) %}
-                {% if room == -999 or unit == -999 %}
-                  {# Occupied-zone sensor or unit reading unavailable: fall back to a
-                     neutral command at target (no gradient correction) so we neither
-                     overcool nor stall while the sensor is out. #}
-                  {% set raw = target %}
-                {% else %}
-                  {% set raw = unit + (target - room) %}
-                {% endif %}
-                {% set rounded = ((raw * 2) | round(0)) / 2 %}
-                {{ [16, [31, rounded] | min] | max }}
-              '';
-            }
-            {
-              # Closed-loop control off an occupied-zone sensor instead of a static
-              # offset. The living-room unit hangs high and central: it over-cools its
-              # own bubble while the window side lags, so its internal sensor reads
-              # COLDER than where people sit and it idles too early. Rather than guess a
-              # fixed offset (which can't track the load-varying near-unit-to-window
-              # gradient), we command the unit's own current reading plus the remaining
-              # room error measured at the occupied-zone sensor:
-              #     C = unit_internal_temp + (target - room)
-              # The unit's inner loop then sees error (room - target) regardless of the
-              # gradient, so it cools while the occupied zone is above target and idles
-              # when it reaches it. Steady state -> room = target, so comfort is set
-              # purely with the AC Target Main Floor slider (no separate trim needed).
-              name = "AC Main Floor Command Setpoint";
-              unique_id = "ac_main_floor_command_setpoint";
-              unit_of_measurement = "C";
-              device_class = "temperature";
-              state = ''
-                {% set target = states('input_number.ac_target_temperature_main_floor') | float(22.5) %}
-                {% set room = states('sensor.ac_main_floor_control_temperature') | float(-999) %}
-                {% set unit = state_attr('climate.living_room_ac', 'current_temperature') | float(-999) %}
-                {% if room == -999 or unit == -999 %}
-                  {# Occupied-zone sensor or unit reading unavailable: fall back to a
-                     neutral command at target (no gradient correction) so we neither
-                     overcool nor stall while the sensor is out. #}
-                  {% set raw = target %}
-                {% else %}
-                  {% set raw = unit + (target - room) %}
-                {% endif %}
-                {% set rounded = ((raw * 2) | round(0)) / 2 %}
-                {{ [16, [31, rounded] | min] | max }}
               '';
             }
             {
@@ -1101,145 +1009,6 @@ PY
             {
               service = "script.turn_on";
               target.entity_id = "script.erv_apply_mode";
-            }
-          ];
-        }
-        {
-          # Set-and-forget inverter modulation. Rather than turning the units
-          # on/off on a hysteresis band (which forces full compressor stop+start
-          # cycles), we hold both units in `cool` at the sensor-corrected setpoint
-          # and let the inverter throttle down to idle. This spares the compressor
-          # (starts/day -> ~1) and makes the AC defer to the ERV automatically:
-          # when bypass free-cooling / a cool night pulls the room to target, the
-          # unit idles on its own with no explicit coordination code.
-          #
-          # The only full "off" is the seasonal/manual master switch
-          # (input_boolean.ac_cooling_enabled). There is no temperature-based
-          # auto-off.
-          #
-          # This automation only pushes each unit's command-setpoint sensor to the
-          # hardware (write-on-change, to keep MELCloud traffic minimal). Both units
-          # use the same closed-loop model: the command-setpoint template commands the
-          # unit's own reading plus the remaining error at an independent occupied-zone
-          # sensor (sensor.ac_*_control_temperature), so each idles when its real room
-          # reaches target regardless of which way its internal sensor is biased
-          # (basement reads high on its hot wall; main floor reads low from over-cooling
-          # its own bubble). See the AC * Command Setpoint templates.
-          id = "ac_maintain_cool";
-          alias = "AC: Maintain continuous cooling";
-          mode = "restart";
-          trigger = [
-            {
-              platform = "homeassistant";
-              event = "start";
-            }
-            {
-              platform = "time_pattern";
-              minutes = "/10";
-            }
-            {
-              platform = "state";
-              entity_id = [
-                "input_boolean.ac_cooling_enabled"
-                "input_number.ac_target_temperature_basement"
-                "input_number.ac_target_temperature_main_floor"
-                "sensor.ac_basement_command_setpoint"
-                "sensor.ac_main_floor_command_setpoint"
-              ];
-            }
-          ];
-          action = [
-            {
-              variables = {
-                cooling_enabled = "{{ is_state('input_boolean.ac_cooling_enabled', 'on') }}";
-                units = ''
-                  {{ [
-                     {'ac': 'climate.basement_ac',    'sp': states('sensor.ac_basement_command_setpoint')  | float(26.0)},
-                     {'ac': 'climate.living_room_ac', 'sp': states('sensor.ac_main_floor_command_setpoint') | float(24.5)}
-                  ] }}
-                '';
-              };
-            }
-            {
-              repeat = {
-                for_each = "{{ units }}";
-                sequence = [
-                  {
-                    choose = [
-                      {
-                        # Season off -> ensure the unit is off.
-                        # Idempotent: only issues turn_off when a unit is actually on.
-                        conditions = [
-                          {
-                            condition = "template";
-                            value_template = "{{ not cooling_enabled and states(repeat.item.ac) not in ['off', 'unavailable', 'unknown'] }}";
-                          }
-                        ];
-                        sequence = [
-                          {
-                            service = "climate.turn_off";
-                            data.entity_id = "{{ repeat.item.ac }}";
-                          }
-                        ];
-                      }
-                      {
-                        # Season on -> ensure cool mode + corrected setpoint.
-                        conditions = [
-                          {
-                            condition = "template";
-                            value_template = "{{ cooling_enabled and states(repeat.item.ac) not in ['unavailable', 'unknown'] }}";
-                          }
-                        ];
-                        sequence = [
-                          {
-                            choose = [
-                              {
-                                conditions = [
-                                  {
-                                    condition = "template";
-                                    value_template = "{{ states(repeat.item.ac) != 'cool' }}";
-                                  }
-                                ];
-                                sequence = [
-                                  {
-                                    service = "climate.set_hvac_mode";
-                                    data = {
-                                      entity_id = "{{ repeat.item.ac }}";
-                                      hvac_mode = "cool";
-                                    };
-                                  }
-                                ];
-                              }
-                            ];
-                          }
-                          {
-                            # Write-on-change only, to keep MELCloud cloud traffic minimal.
-                            choose = [
-                              {
-                                conditions = [
-                                  {
-                                    condition = "template";
-                                    value_template = "{{ (state_attr(repeat.item.ac, 'temperature') | float(-99)) != repeat.item.sp }}";
-                                  }
-                                ];
-                                sequence = [
-                                  {
-                                    service = "climate.set_temperature";
-                                    data = {
-                                      entity_id = "{{ repeat.item.ac }}";
-                                      temperature = "{{ repeat.item.sp }}";
-                                    };
-                                  }
-                                ];
-                              }
-                            ];
-                          }
-                        ];
-                      }
-                    ];
-                  }
-                ];
-              };
             }
           ];
         }
