@@ -664,40 +664,6 @@ PY
             }
           ];
         }
-        {
-          # Freshness heartbeat for Versatile Thermostat's "Last seen room temperature
-          # datetime" field. The alpstuga temperature only emits a new state when its
-          # VALUE changes, so a stable reading looks "stale" to VT and trips it into
-          # safety mode (the clock badge) even though the sensor is alive. These
-          # timestamp sensors tick every 2 min (now() always differs, so HA can't
-          # dedupe them) while the underlying alpstuga is available. Wire each into the
-          # matching VT thermostat's "Last seen room temperature datetime" so VT judges
-          # freshness by this heartbeat, not the flat temperature. If the alpstuga goes
-          # unavailable the heartbeat stops (availability -> false), so VT still enters
-          # safety mode when the sensor genuinely dies.
-          trigger = [
-            { platform = "homeassistant"; event = "start"; }
-            { platform = "time_pattern"; minutes = "/2"; }
-            { platform = "state"; entity_id = "sensor.alpstuga_air_quality_monitor_temperature"; }
-            { platform = "state"; entity_id = "sensor.alpstuga_air_quality_monitor_temperature_2"; }
-          ];
-          sensor = [
-            {
-              name = "AC Main Floor Room Temp Last Seen";
-              unique_id = "ac_main_floor_room_temp_last_seen";
-              device_class = "timestamp";
-              availability = "{{ has_value('sensor.alpstuga_air_quality_monitor_temperature') }}";
-              state = "{{ now().isoformat() }}";
-            }
-            {
-              name = "AC Basement Room Temp Last Seen";
-              unique_id = "ac_basement_room_temp_last_seen";
-              device_class = "timestamp";
-              availability = "{{ has_value('sensor.alpstuga_air_quality_monitor_temperature_2') }}";
-              state = "{{ now().isoformat() }}";
-            }
-          ];
-        }
       ];
 
       sensor = [
