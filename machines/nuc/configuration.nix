@@ -465,7 +465,8 @@ PY
       "thread"
       "met"
       "shopping_list"
-      "tuya"
+      # NB: cloud "tuya" intentionally not enabled -- the ERV is on the localtuya
+      # custom component (independent of this) and the ALPSTUGA monitor is Matter.
     ];
     config = {
       default_config = { };
