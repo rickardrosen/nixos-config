@@ -540,26 +540,12 @@ PY
           mode = "slider";
           icon = "mdi:home-floor-0";
         };
-        ac_sensor_offset_basement = {
-          name = "AC Sensor Offset Basement";
-          min = -5;
-          max = 8;
-          step = 0.1;
-          initial = 3.6;
-          unit_of_measurement = "C";
-          mode = "slider";
-          icon = "mdi:thermometer-chevron-up";
-        };
-        ac_sensor_offset_main_floor = {
-          name = "AC Sensor Offset Main Floor";
-          min = -5;
-          max = 8;
-          step = 0.1;
-          initial = 1.4;
-          unit_of_measurement = "C";
-          mode = "slider";
-          icon = "mdi:thermometer-chevron-up";
-        };
+        # No sensor-offset/trim sliders: both units are closed-loop off their own
+        # occupied-zone sensor (sensor.ac_*_control_temperature) and settle at their
+        # target slider directly. The unit's internal-sensor error (basement reads
+        # high on its hot wall; main floor reads low from over-cooling its own bubble)
+        # is cancelled live by the command-setpoint formula, so no static offset is
+        # needed in either direction.
       };
 
       script = {
@@ -677,27 +663,62 @@ PY
               '';
             }
             {
+              # Closed loop off the basement occupied-zone sensor, same model as the
+              # main floor. The basement unit sits on a hot wall so its internal sensor
+              # reads HIGH; the formula cancels that live via the unit's own reading:
+              #     C = unit_internal_temp + (target - room)
+              # -> the inner loop sees error (room - target), idling when the real
+              # basement reaches target. Steady state -> room = target (set via the AC
+              # Target Basement slider). No static offset needed.
               name = "AC Basement Command Setpoint";
               unique_id = "ac_basement_command_setpoint";
               unit_of_measurement = "C";
               device_class = "temperature";
               state = ''
                 {% set target = states('input_number.ac_target_temperature_basement') | float(22.5) %}
-                {% set offset = states('input_number.ac_sensor_offset_basement') | float(4) %}
-                {% set raw = target + offset %}
+                {% set room = states('sensor.ac_basement_control_temperature') | float(-999) %}
+                {% set unit = state_attr('climate.basement_ac', 'current_temperature') | float(-999) %}
+                {% if room == -999 or unit == -999 %}
+                  {# Occupied-zone sensor or unit reading unavailable: fall back to a
+                     neutral command at target (no gradient correction) so we neither
+                     overcool nor stall while the sensor is out. #}
+                  {% set raw = target %}
+                {% else %}
+                  {% set raw = unit + (target - room) %}
+                {% endif %}
                 {% set rounded = ((raw * 2) | round(0)) / 2 %}
                 {{ [16, [31, rounded] | min] | max }}
               '';
             }
             {
+              # Closed-loop control off an occupied-zone sensor instead of a static
+              # offset. The living-room unit hangs high and central: it over-cools its
+              # own bubble while the window side lags, so its internal sensor reads
+              # COLDER than where people sit and it idles too early. Rather than guess a
+              # fixed offset (which can't track the load-varying near-unit-to-window
+              # gradient), we command the unit's own current reading plus the remaining
+              # room error measured at the occupied-zone sensor:
+              #     C = unit_internal_temp + (target - room)
+              # The unit's inner loop then sees error (room - target) regardless of the
+              # gradient, so it cools while the occupied zone is above target and idles
+              # when it reaches it. Steady state -> room = target, so comfort is set
+              # purely with the AC Target Main Floor slider (no separate trim needed).
               name = "AC Main Floor Command Setpoint";
               unique_id = "ac_main_floor_command_setpoint";
               unit_of_measurement = "C";
               device_class = "temperature";
               state = ''
                 {% set target = states('input_number.ac_target_temperature_main_floor') | float(23.5) %}
-                {% set offset = states('input_number.ac_sensor_offset_main_floor') | float(1) %}
-                {% set raw = target + offset %}
+                {% set room = states('sensor.ac_main_floor_control_temperature') | float(-999) %}
+                {% set unit = state_attr('climate.living_room_ac', 'current_temperature') | float(-999) %}
+                {% if room == -999 or unit == -999 %}
+                  {# Occupied-zone sensor or unit reading unavailable: fall back to a
+                     neutral command at target (no gradient correction) so we neither
+                     overcool nor stall while the sensor is out. #}
+                  {% set raw = target %}
+                {% else %}
+                  {% set raw = unit + (target - room) %}
+                {% endif %}
                 {% set rounded = ((raw * 2) | round(0)) / 2 %}
                 {{ [16, [31, rounded] | min] | max }}
               '';
@@ -746,6 +767,40 @@ PY
             {
               filter = "time_simple_moving_average";
               window_size = "02:00";
+              precision = 1;
+            }
+          ];
+        }
+        {
+          # Occupied-zone reference for the living-room AC closed loop. The living-room
+          # alpstuga monitor is the NO-SUFFIX entity (the _2 one is the basement),
+          # modestly smoothed (20 min) to reject sensor noise without lagging real load
+          # changes. If it goes unavailable the command-setpoint fallback holds a
+          # neutral setpoint.
+          platform = "filter";
+          name = "AC Main Floor Control Temperature";
+          unique_id = "ac_main_floor_control_temperature";
+          entity_id = "sensor.alpstuga_air_quality_monitor_temperature";
+          filters = [
+            {
+              filter = "time_simple_moving_average";
+              window_size = "00:20";
+              precision = 1;
+            }
+          ];
+        }
+        {
+          # Occupied-zone reference for the basement AC closed loop. The basement
+          # alpstuga monitor is the _2 entity (same one preferred by the ERV indoor
+          # reference). Same 20-min smoothing / unavailable-fallback as the main floor.
+          platform = "filter";
+          name = "AC Basement Control Temperature";
+          unique_id = "ac_basement_control_temperature";
+          entity_id = "sensor.alpstuga_air_quality_monitor_temperature_2";
+          filters = [
+            {
+              filter = "time_simple_moving_average";
+              window_size = "00:20";
               precision = 1;
             }
           ];
@@ -1060,8 +1115,16 @@ PY
           #
           # The only full "off" is the seasonal/manual master switch
           # (input_boolean.ac_cooling_enabled). There is no temperature-based
-          # auto-off. The offset sliders calibrate the unit's wrong internal
-          # sensor so it idles when the real room is at target.
+          # auto-off.
+          #
+          # This automation only pushes each unit's command-setpoint sensor to the
+          # hardware (write-on-change, to keep MELCloud traffic minimal). Both units
+          # use the same closed-loop model: the command-setpoint template commands the
+          # unit's own reading plus the remaining error at an independent occupied-zone
+          # sensor (sensor.ac_*_control_temperature), so each idles when its real room
+          # reaches target regardless of which way its internal sensor is biased
+          # (basement reads high on its hot wall; main floor reads low from over-cooling
+          # its own bubble). See the AC * Command Setpoint templates.
           id = "ac_maintain_cool";
           alias = "AC: Maintain continuous cooling";
           mode = "restart";
@@ -1080,8 +1143,6 @@ PY
                 "input_boolean.ac_cooling_enabled"
                 "input_number.ac_target_temperature_basement"
                 "input_number.ac_target_temperature_main_floor"
-                "input_number.ac_sensor_offset_basement"
-                "input_number.ac_sensor_offset_main_floor"
                 "sensor.ac_basement_command_setpoint"
                 "sensor.ac_main_floor_command_setpoint"
               ];
