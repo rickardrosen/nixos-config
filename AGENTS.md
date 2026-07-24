@@ -168,8 +168,11 @@ the basement bedroom (heat leak from the adjacent heater/laundry room).
   - `sensor.alpstuga_air_quality_monitor_temperature` = **main floor**
   - `sensor.alpstuga_air_quality_monitor_temperature_2` = **basement**
   - `_2` variants of humidity / CO₂ / PM2.5 exist per location too.
-- **LK Systems** — water/leak system via a custom-built component (`lksystems`, patched at
-  build time in `configuration.nix`).
+- **LK Systems** — custom-built component (`lksystems`, patched at build time in
+  `configuration.nix`). Exposes the basement bathroom humidity sensor as
+  `sensor.ff_82_54_7f_7c_90_humidity` (MAC-address-style entity id — the
+  `postPatch` strips a MAC-looking friendly name, but doesn't rename the entity id
+  itself), used as an ERV Boost trigger below.
 
 **AC control model (offset + modulation, alpstuga as authority):**
 The AC setpoint is commanded as `room target + per-unit offset`
@@ -186,21 +189,42 @@ earlier `erv_ac_staged_cooling` arbitration automation was removed as unnecessar
 complexity. The ERV bypass pre-cools the thermal mass on cool nights (OA usually drops below
 18°C); the AC handles daytime sun-load peaks.
 
+**ERV fan speed: fully automatic, no dial.** There is deliberately no `input_select` for
+ERV mode — nothing to pick or maintain. Priority, highest first:
+1. **Boost (Speed 10)** — any of 7 air-quality triggers (CO₂/PM2.5/humidity on both
+   alpstuga rooms + the LK bathroom humidity sensor). Always wins.
+2. **Low (Speed 2)** — house empty 15+ min (`zone.home`). OVK's minimum-airflow
+   requirement only applies while occupied, so dropping below it while empty is fine —
+   this is just enough flow to avoid duct/mould issues, not a compliance concern.
+3. **Baseline (`sensor.erv_baseline_speed`)** — **Speed 6** whenever either AC is actively
+   cooling or outdoor temp is below 13°C (protects heat-recovery efficiency: slower air
+   spends more time in the exchanger core); **Speed 8** otherwise (quieter than 6 *and*
+   moves more air — a deliberate DC-fan noise-curve quirk — but costs a bit of that
+   efficiency, so only used when there's no heat/cool worth recovering). 6 is also the
+   OVK-certified minimum for this house, tuned by the installer to just pass inspection.
+
 **Helpers (`input_*`):**
 - `input_boolean.erv_ac_coordination_enabled` — master enable for automated AC control.
-- `input_select.erv_mode` — Normal / Boost / Away / Quiet (mapped to fan speeds by
-  `script.erv_apply_mode`).
 - `input_number.ac_target_temperature_{basement,main_floor}` — desired room temps.
 - `input_number.ac_sensor_offset_{basement,main_floor}` — internal-sensor compensation.
 - `input_number.ac_hysteresis_{on,off}` — cooling on/off thresholds.
 
 **Automations:**
 - `ac_two_zone_external_control` — the two-zone AC cooling thermostat (see model above).
-- `erv_apply_mode_on_change` + `script.erv_apply_mode` — apply the selected ERV fan speed.
-- `erv_boost_on_poor_air` / `erv_recover_to_auto` / `erv_boost_timeout` — auto-Boost the ERV
-  on high CO₂ / PM2.5 / humidity, then recover; independent of cooling.
-- `erv_away_when_empty` / `erv_normal_when_occupied` — occupancy-based ERV mode via
-  `zone.home`.
+- `script.erv_set_speed` — takes a `speed` field (e.g. `"Speed 10"`) and applies it to both
+  ERV fan selects; called directly by each automation below (not via a reactive
+  middleman) so HA's Logbook attributes the fan-speed change to the real deciding
+  automation.
+- `erv_boost_on_poor_air` — auto-Boost on high CO₂ / PM2.5 / humidity; independent of
+  cooling.
+- `erv_low_when_empty` — occupancy-based Low mode via `zone.home` (outranked by an active
+  Boost).
+- `erv_apply_baseline` — re-asserts `sensor.erv_baseline_speed` (or Low, if the house is
+  empty) whenever nothing overrides: air recovers from Boost, occupancy returns, either
+  AC's cooling state changes, outdoor temp crosses 13°C, or a periodic safety-net recheck.
+- `sensor.erv_mode_reason` — plain-language "why is the ERV doing this right now" template
+  sensor (reads the actual fan-speed entity plus live conditions), independent of Logbook
+  digging.
 - `erv_bypass_window_auto` — computes bypass X/Y from indoor temps and writes them to the
   Tuya ERV (write-on-change only, indoor-aware safety to disable bypass when already cool).
 

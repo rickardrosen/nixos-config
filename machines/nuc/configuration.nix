@@ -499,19 +499,10 @@ PY
         ];
       };
 
-      input_select = {
-        erv_mode = {
-          name = "ERV Mode";
-          options = [
-            "Normal"
-            "Boost"
-            "Away"
-            "Quiet"
-          ];
-          initial = "Normal";
-          icon = "mdi:fan";
-        };
-      };
+      # No input_select here on purpose: the ERV fully drives itself, nothing to
+      # pick or maintain. Priority, highest first: Boost (poor air) > Low (house
+      # empty) > seasonal baseline (see sensor.erv_baseline_speed below). See the
+      # `automation` block for the three automations that implement this.
 
       # AC target temperatures, the seasonal on/off, and the closed-loop control that
       # used to live here (input_number targets + command-setpoint templates +
@@ -519,88 +510,23 @@ PY
       # Each room's target and on/off now live on its climate.* VT entity.
 
       script = {
-        erv_apply_mode = {
-          alias = "ERV Apply Mode";
+        erv_set_speed = {
+          alias = "ERV Set Speed";
           mode = "restart";
+          fields.speed = {
+            description = ''Tuya fan speed option to apply, e.g. "Speed 8".'';
+            example = "Speed 8";
+          };
           sequence = [
             {
-              choose = [
-                {
-                  conditions = [
-                    {
-                      condition = "state";
-                      entity_id = "input_select.erv_mode";
-                      state = "Boost";
-                    }
-                  ];
-                  sequence = [
-                    {
-                      service = "select.select_option";
-                      target = {
-                        entity_id = [
-                          "select.smart_erv_smart_erv_supply_air"
-                          "select.smart_erv_smart_erv_exhaust_air"
-                        ];
-                      };
-                      data.option = "Speed 10";
-                    }
-                  ];
-                }
-                {
-                  conditions = [
-                    {
-                      condition = "state";
-                      entity_id = "input_select.erv_mode";
-                      state = "Normal";
-                    }
-                  ];
-                  sequence = [
-                    {
-                      service = "select.select_option";
-                      target = {
-                        entity_id = [
-                          "select.smart_erv_smart_erv_supply_air"
-                          "select.smart_erv_smart_erv_exhaust_air"
-                        ];
-                      };
-                      data.option = "Speed 8";
-                    }
-                  ];
-                }
-                {
-                  conditions = [
-                    {
-                      condition = "state";
-                      entity_id = "input_select.erv_mode";
-                      state = "Quiet";
-                    }
-                  ];
-                  sequence = [
-                    {
-                      service = "select.select_option";
-                      target = {
-                        entity_id = [
-                          "select.smart_erv_smart_erv_supply_air"
-                          "select.smart_erv_smart_erv_exhaust_air"
-                        ];
-                      };
-                      data.option = "Speed 3";
-                    }
-                  ];
-                }
-              ];
-              default = [
-                {
-                  service = "select.select_option";
-                  target = {
-                    entity_id = [
-                      "select.smart_erv_smart_erv_supply_air"
-                      "select.smart_erv_smart_erv_exhaust_air"
-                    ];
-                  };
-                  data.option = "Speed 2";
-                }
-              ];
+              service = "select.select_option";
+              target = {
+                entity_id = [
+                  "select.smart_erv_smart_erv_supply_air"
+                  "select.smart_erv_smart_erv_exhaust_air"
+                ];
+              };
+              data.option = "{{ speed }}";
             }
           ];
         };
@@ -683,6 +609,65 @@ PY
               device_class = "timestamp";
               availability = "{{ has_value('sensor.alpstuga_air_quality_monitor_temperature_2') }}";
               state = "{{ states.sensor.alpstuga_air_quality_monitor_temperature_2.last_updated }}";
+            }
+            {
+              # What the ERV should idle at whenever nothing overrides it (no Boost,
+              # house occupied). 6 is the OVK-certified minimum for this house
+              # (tuned to protect heat-recovery efficiency: slower air spends more
+              # time in the exchanger core). 8 is quieter AND moves more air than 6,
+              # but trades a bit of that efficiency -- so it's only used when there's
+              # no heat/cool actually worth recovering. Read by erv_apply_baseline
+              # and by the reason sensor below, so the logic only lives in one place.
+              name = "ERV Baseline Speed";
+              unique_id = "erv_baseline_speed";
+              icon = "mdi:fan";
+              state = ''
+                {% set cooling = is_state('sensor.ac_basement_action', 'cooling')
+                                  or is_state('sensor.ac_main_floor_action', 'cooling') %}
+                {% set cold_outside = states('sensor.smart_erv_outdoor_temperature') | float(99) < 13 %}
+                {% if cooling or cold_outside %}Speed 6
+                {% else %}Speed 8
+                {% endif %}
+              '';
+            }
+            {
+              # Plain-language answer to "why is the ERV doing this right now" --
+              # independent of Logbook automation attribution, which only ever shows
+              # the last thing to touch the entity. Re-evaluates automatically
+              # whenever any referenced entity changes (standard template-sensor
+              # behaviour, same as the other sensors in this block).
+              name = "ERV Mode Reason";
+              unique_id = "erv_mode_reason";
+              icon = "mdi:information-outline";
+              state = ''
+                {% set speed = states('select.smart_erv_smart_erv_supply_air') %}
+                {% if speed == 'Speed 10' %}
+                  {% set co2_1 = states('sensor.alpstuga_air_quality_monitor_carbon_dioxide') | float(0) %}
+                  {% set co2_2 = states('sensor.alpstuga_air_quality_monitor_carbon_dioxide_2') | float(0) %}
+                  {% set pm_1 = states('sensor.alpstuga_air_quality_monitor_pm2_5') | float(0) %}
+                  {% set pm_2 = states('sensor.alpstuga_air_quality_monitor_pm2_5_2') | float(0) %}
+                  {% set hum_1 = states('sensor.alpstuga_air_quality_monitor_humidity') | float(0) %}
+                  {% set hum_2 = states('sensor.alpstuga_air_quality_monitor_humidity_2') | float(0) %}
+                  {% set bath_hum = states('sensor.ff_82_54_7f_7c_90_humidity') | float(0) %}
+                  {% if co2_1 > 800 %}Auto: Boost - living room CO2 {{ co2_1 | round }} ppm
+                  {% elif co2_2 > 800 %}Auto: Boost - basement CO2 {{ co2_2 | round }} ppm
+                  {% elif pm_1 > 20 %}Auto: Boost - living room PM2.5 {{ pm_1 | round }} ug/m3
+                  {% elif pm_2 > 20 %}Auto: Boost - basement PM2.5 {{ pm_2 | round }} ug/m3
+                  {% elif hum_1 > 65 %}Auto: Boost - living room humidity {{ hum_1 | round }}%
+                  {% elif hum_2 > 65 %}Auto: Boost - basement humidity {{ hum_2 | round }}%
+                  {% elif bath_hum > 65 %}Auto: Boost - bathroom humidity {{ bath_hum | round }}%
+                  {% else %}Auto: Boost - waiting for air quality to recover
+                  {% endif %}
+                {% elif speed == 'Speed 2' and states('zone.home') | int(1) < 1 %}
+                  Auto: Low - house is empty
+                {% elif is_state('sensor.ac_basement_action', 'cooling') or is_state('sensor.ac_main_floor_action', 'cooling') %}
+                  Auto: Baseline {{ speed }} - AC cooling, protecting heat recovery
+                {% elif states('sensor.smart_erv_outdoor_temperature') | float(99) < 13 %}
+                  Auto: Baseline {{ speed }} - cold outside, protecting heat recovery
+                {% else %}
+                  Auto: Baseline {{ speed }} - mild weather, prioritising quiet + airflow
+                {% endif %}
+              '';
             }
           ];
         }
@@ -841,23 +826,6 @@ PY
 
       automation = [
         {
-          id = "erv_apply_mode_on_change";
-          alias = "ERV: Apply selected mode";
-          mode = "single";
-          trigger = [
-            {
-              platform = "state";
-              entity_id = "input_select.erv_mode";
-            }
-          ];
-          action = [
-            {
-              service = "script.turn_on";
-              target.entity_id = "script.erv_apply_mode";
-            }
-          ];
-        }
-        {
           id = "erv_boost_on_poor_air";
           alias = "ERV: Boost on poor air";
           mode = "single";
@@ -892,144 +860,40 @@ PY
               entity_id = "sensor.alpstuga_air_quality_monitor_humidity_2";
               above = 65;
             }
+            {
+              # Basement bathroom humidity (LK Systems sensor).
+              platform = "numeric_state";
+              entity_id = "sensor.ff_82_54_7f_7c_90_humidity";
+              above = 65;
+            }
           ];
           condition = [
             {
+              # Skip if already boosted, so this doesn't re-fire (and spam the
+              # Logbook) on every subsequent sensor tick while air stays bad.
               condition = "not";
               conditions = [
                 {
                   condition = "state";
-                  entity_id = "input_select.erv_mode";
-                  state = "Boost";
+                  entity_id = "select.smart_erv_smart_erv_supply_air";
+                  state = "Speed 10";
                 }
               ];
             }
           ];
           action = [
             {
-              service = "input_select.select_option";
-              target.entity_id = "input_select.erv_mode";
-              data.option = "Boost";
+              # Called directly (not via a reactive middleman automation) so the
+              # Logbook attributes the fan-speed entity change to THIS
+              # automation -- the actual "why".
+              service = "script.erv_set_speed";
+              data.speed = "Speed 10";
             }
           ];
         }
         {
-          id = "erv_recover_to_auto";
-          alias = "ERV: Back to auto when air recovers";
-          mode = "single";
-          trigger = [
-            {
-              platform = "numeric_state";
-              entity_id = "sensor.alpstuga_air_quality_monitor_carbon_dioxide";
-              below = 700;
-              for = "00:15:00";
-            }
-            {
-              platform = "numeric_state";
-              entity_id = "sensor.alpstuga_air_quality_monitor_carbon_dioxide_2";
-              below = 700;
-              for = "00:15:00";
-            }
-            {
-              platform = "numeric_state";
-              entity_id = "sensor.alpstuga_air_quality_monitor_pm2_5";
-              below = 10;
-              for = "00:15:00";
-            }
-            {
-              platform = "numeric_state";
-              entity_id = "sensor.alpstuga_air_quality_monitor_pm2_5_2";
-              below = 10;
-              for = "00:15:00";
-            }
-            {
-              platform = "numeric_state";
-              entity_id = "sensor.alpstuga_air_quality_monitor_humidity";
-              below = 58;
-              for = "00:15:00";
-            }
-            {
-              platform = "numeric_state";
-              entity_id = "sensor.alpstuga_air_quality_monitor_humidity_2";
-              below = 58;
-              for = "00:15:00";
-            }
-          ];
-          condition = [
-            {
-              condition = "state";
-              entity_id = "input_select.erv_mode";
-              state = "Boost";
-            }
-            {
-              condition = "numeric_state";
-              entity_id = "sensor.alpstuga_air_quality_monitor_carbon_dioxide";
-              below = 700;
-            }
-            {
-              condition = "numeric_state";
-              entity_id = "sensor.alpstuga_air_quality_monitor_carbon_dioxide_2";
-              below = 700;
-            }
-            {
-              condition = "numeric_state";
-              entity_id = "sensor.alpstuga_air_quality_monitor_pm2_5";
-              below = 10;
-            }
-            {
-              condition = "numeric_state";
-              entity_id = "sensor.alpstuga_air_quality_monitor_pm2_5_2";
-              below = 10;
-            }
-            {
-              condition = "numeric_state";
-              entity_id = "sensor.alpstuga_air_quality_monitor_humidity";
-              below = 58;
-            }
-            {
-              condition = "numeric_state";
-              entity_id = "sensor.alpstuga_air_quality_monitor_humidity_2";
-              below = 58;
-            }
-          ];
-          action = [
-            {
-              service = "input_select.select_option";
-              target.entity_id = "input_select.erv_mode";
-              data.option = "Normal";
-            }
-          ];
-        }
-        {
-          id = "erv_boost_timeout";
-          alias = "ERV: Boost timeout";
-          mode = "single";
-          trigger = [
-            {
-              platform = "state";
-              entity_id = "input_select.erv_mode";
-              to = "Boost";
-              for = "00:45:00";
-            }
-          ];
-          condition = [
-            {
-              condition = "state";
-              entity_id = "input_select.erv_mode";
-              state = "Boost";
-            }
-          ];
-          action = [
-            {
-              service = "input_select.select_option";
-              target.entity_id = "input_select.erv_mode";
-              data.option = "Normal";
-            }
-          ];
-        }
-        {
-          id = "erv_away_when_empty";
-          alias = "ERV: Set Away when nobody home";
+          id = "erv_low_when_empty";
+          alias = "ERV: Low mode when nobody home";
           mode = "single";
           trigger = [
             {
@@ -1039,19 +903,77 @@ PY
               for = "00:15:00";
             }
           ];
+          condition = [
+            {
+              # Poor-air Boost always outranks the away override.
+              condition = "not";
+              conditions = [
+                {
+                  condition = "state";
+                  entity_id = "select.smart_erv_smart_erv_supply_air";
+                  state = "Speed 10";
+                }
+              ];
+            }
+          ];
           action = [
             {
-              service = "input_select.select_option";
-              target.entity_id = "input_select.erv_mode";
-              data.option = "Away";
+              service = "script.erv_set_speed";
+              data.speed = "Speed 2";
             }
           ];
         }
         {
-          id = "erv_normal_when_occupied";
-          alias = "ERV: Return to Normal quickly when occupied";
+          id = "erv_apply_baseline";
+          alias = "ERV: Apply baseline speed";
           mode = "single";
           trigger = [
+            # Air quality has been good for 15 straight minutes (ends a Boost).
+            # Mirrors the old dual-hysteresis design: 800/20/65 to enter Boost,
+            # 700/10/58 sustained to leave it.
+            {
+              platform = "numeric_state";
+              entity_id = "sensor.alpstuga_air_quality_monitor_carbon_dioxide";
+              below = 700;
+              for = "00:15:00";
+            }
+            {
+              platform = "numeric_state";
+              entity_id = "sensor.alpstuga_air_quality_monitor_carbon_dioxide_2";
+              below = 700;
+              for = "00:15:00";
+            }
+            {
+              platform = "numeric_state";
+              entity_id = "sensor.alpstuga_air_quality_monitor_pm2_5";
+              below = 10;
+              for = "00:15:00";
+            }
+            {
+              platform = "numeric_state";
+              entity_id = "sensor.alpstuga_air_quality_monitor_pm2_5_2";
+              below = 10;
+              for = "00:15:00";
+            }
+            {
+              platform = "numeric_state";
+              entity_id = "sensor.alpstuga_air_quality_monitor_humidity";
+              below = 58;
+              for = "00:15:00";
+            }
+            {
+              platform = "numeric_state";
+              entity_id = "sensor.alpstuga_air_quality_monitor_humidity_2";
+              below = 58;
+              for = "00:15:00";
+            }
+            {
+              platform = "numeric_state";
+              entity_id = "sensor.ff_82_54_7f_7c_90_humidity";
+              below = 58;
+              for = "00:15:00";
+            }
+            # Someone came home after an away-triggered Low.
             {
               platform = "homeassistant";
               event = "start";
@@ -1062,33 +984,57 @@ PY
               above = 0;
               for = "00:00:30";
             }
+            # Season/AC-load changed, which flips sensor.erv_baseline_speed
+            # between Speed 6 and Speed 8.
+            {
+              platform = "state";
+              entity_id = [
+                "sensor.ac_basement_action"
+                "sensor.ac_main_floor_action"
+              ];
+            }
+            {
+              platform = "numeric_state";
+              entity_id = "sensor.smart_erv_outdoor_temperature";
+              above = 13;
+            }
+            {
+              platform = "numeric_state";
+              entity_id = "sensor.smart_erv_outdoor_temperature";
+              below = 13;
+            }
+            # Safety-net re-check, catches any case the specific triggers above miss.
             {
               platform = "time_pattern";
-              minutes = "/2";
+              minutes = "/15";
             }
           ];
           condition = [
             {
-              condition = "numeric_state";
-              entity_id = "zone.home";
-              above = 0;
-            }
-            {
-              condition = "template";
-              value_template = ''
-                {{ states('input_select.erv_mode') not in ['Normal', 'Boost', 'Quiet'] }}
-              '';
+              # Poor-air Boost always outranks the baseline.
+              condition = "not";
+              conditions = [
+                {
+                  condition = "state";
+                  entity_id = "select.smart_erv_smart_erv_supply_air";
+                  state = "Speed 10";
+                }
+              ];
             }
           ];
           action = [
             {
-              service = "input_select.select_option";
-              target.entity_id = "input_select.erv_mode";
-              data.option = "Normal";
+              variables = {
+                target_speed = ''
+                  {% if states('zone.home') | int(0) < 1 %}Speed 2
+                  {% else %}{{ states('sensor.erv_baseline_speed') }}
+                  {% endif %}
+                '';
+              };
             }
             {
-              service = "script.turn_on";
-              target.entity_id = "script.erv_apply_mode";
+              service = "script.erv_set_speed";
+              data.speed = "{{ target_speed }}";
             }
           ];
         }
@@ -1100,12 +1046,6 @@ PY
             {
               platform = "homeassistant";
               event = "start";
-            }
-            {
-              platform = "state";
-              entity_id = [
-                "input_select.erv_mode"
-              ];
             }
             {
               platform = "time_pattern";
