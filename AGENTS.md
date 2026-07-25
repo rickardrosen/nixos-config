@@ -174,14 +174,18 @@ the basement bedroom (heat leak from the adjacent heater/laundry room).
   `postPatch` strips a MAC-looking friendly name, but doesn't rename the entity id
   itself), used as an ERV Boost trigger below.
 
-**AC control model (offset + modulation, alpstuga as authority):**
-The AC setpoint is commanded as `room target + per-unit offset`
-(`ac_target_temperature_*` + `ac_sensor_offset_*`, offsets ≈ +4 basement / +1 main). The
-offset compensates for the miscalibrated internal sensor so the inverter modulates toward
-the true room target instead of short-cycling. HA then uses the alpstuga reading as a coarse
-on/off authority with dual hysteresis (`ac_hysteresis_on/off`) plus min-run (900s) / min-off
-(600s) timers to protect the compressor and minimise cloud calls. This all lives in the
-`ac_two_zone_external_control` automation.
+**AC control model (Versatile Thermostat, migrated 2026-07-20):** each Mitsubishi head
+(`climate.basement_ac`, `climate.living_room_ac`) is wrapped by a Versatile Thermostat
+`over_climate` entity (`climate.basement`, `climate.living_room`), **configured in the HA
+UI** (Settings → Devices & Services → Versatile Thermostat), not in Nix. VT modulates the
+underlying unit's setpoint toward the alpstuga room reading — fed in as VT's external
+sensor via the Nix-defined `sensor.ac_{basement,main_floor}_control_temperature` (20-min
+smoothed filter sensors) — instead of the AC's own miscalibrated internal sensor, avoiding
+on/off short-cycling. What Nix still owns: those two filter sensors, plus observability
+(`ac_*_action`, `_run_time_today`, `_starts_today`, `_starts_last_hour`, and the
+short-cycling trend binary sensors) — all read `hvac_action` off the **VT entities**
+(`climate.basement`/`climate.living_room`), not the raw MELCloud ones, confirmed
+2026-07-25 that `melcloud_home` doesn't expose `hvac_action` at all.
 
 **ERV ↔ AC coordination:** none needed. Because the bypass window only opens when OA is
 cooler than indoor, free cooling and mechanical cooling always push the same direction — an
@@ -203,14 +207,10 @@ ERV mode — nothing to pick or maintain. Priority, highest first:
    efficiency, so only used when there's no heat/cool worth recovering). 6 is also the
    OVK-certified minimum for this house, tuned by the installer to just pass inspection.
 
-**Helpers (`input_*`):**
-- `input_boolean.erv_ac_coordination_enabled` — master enable for automated AC control.
-- `input_number.ac_target_temperature_{basement,main_floor}` — desired room temps.
-- `input_number.ac_sensor_offset_{basement,main_floor}` — internal-sensor compensation.
-- `input_number.ac_hysteresis_{on,off}` — cooling on/off thresholds.
+**Helpers (`input_*`):** none — AC tuning (target temp, hysteresis, regulation) now lives
+entirely in each VT entity's UI config (`.storage`), not as Nix `input_*` helpers.
 
 **Automations:**
-- `ac_two_zone_external_control` — the two-zone AC cooling thermostat (see model above).
 - `script.erv_set_speed` — takes a `speed` field (e.g. `"Speed 10"`) and applies it to both
   ERV fan selects; called directly by each automation below (not via a reactive
   middleman) so HA's Logbook attributes the fan-speed change to the real deciding
