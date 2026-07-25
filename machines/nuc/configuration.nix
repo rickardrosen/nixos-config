@@ -1016,15 +1016,26 @@ PY
           ];
           condition = [
             {
-              # Poor-air Boost always outranks the baseline.
-              condition = "not";
-              conditions = [
-                {
-                  condition = "state";
-                  entity_id = "select.smart_erv_smart_erv_supply_air";
-                  state = "Speed 10";
-                }
-              ];
+              # Checks the LIVE air-quality numbers, not the fan's current speed --
+              # deliberately, not an oversight. This automation's whole job includes
+              # ENDING a Boost, which means it must be allowed to run while the fan
+              # is still sitting at Speed 10; gating on "fan isn't at Speed 10" would
+              # make that impossible (a boost could never turn itself off, since the
+              # condition unlocking the turn-off action would require it already be
+              # off). So: skip only if air is still genuinely bad right now: it's
+              # safe to (re)apply Low/baseline otherwise, whatever the fan is doing.
+              condition = "template";
+              value_template = ''
+                {% set co2_1 = states('sensor.alpstuga_air_quality_monitor_carbon_dioxide') | float(9999) %}
+                {% set co2_2 = states('sensor.alpstuga_air_quality_monitor_carbon_dioxide_2') | float(9999) %}
+                {% set pm_1 = states('sensor.alpstuga_air_quality_monitor_pm2_5') | float(9999) %}
+                {% set pm_2 = states('sensor.alpstuga_air_quality_monitor_pm2_5_2') | float(9999) %}
+                {% set hum_1 = states('sensor.alpstuga_air_quality_monitor_humidity') | float(9999) %}
+                {% set hum_2 = states('sensor.alpstuga_air_quality_monitor_humidity_2') | float(9999) %}
+                {% set bath_hum = states('sensor.ff_82_54_7f_7c_90_humidity') | float(9999) %}
+                {{ co2_1 < 700 and co2_2 < 700 and pm_1 < 10 and pm_2 < 10
+                   and hum_1 < 58 and hum_2 < 58 and bath_hum < 58 }}
+              '';
             }
           ];
           action = [
