@@ -563,11 +563,16 @@ PY
               # state so it is recorded in history and can be graphed / counted.
               # cooling = compressor working, idle = on but throttled to minimum,
               # off = compressor stopped (the state we want to avoid cycling into).
+              # Read from the VERSATILE THERMOSTAT wrapper (climate.basement), not the
+              # raw MELCloud entity (climate.basement_ac) -- confirmed live (2026-07-25)
+              # that melcloud_home doesn't expose hvac_action at all (always "unknown"
+              # here), while VT's own over_climate hvac_action is correct and matches
+              # its is_device_active attribute.
               name = "AC Basement Action";
               unique_id = "ac_basement_action";
-              state = "{{ state_attr('climate.basement_ac', 'hvac_action') | default('unknown') }}";
+              state = "{{ state_attr('climate.basement', 'hvac_action') | default('unknown') }}";
               icon = ''
-                {% set a = state_attr('climate.basement_ac', 'hvac_action') %}
+                {% set a = state_attr('climate.basement', 'hvac_action') %}
                 {% if a == 'cooling' %}mdi:snowflake
                 {% elif a == 'idle' %}mdi:snowflake-off
                 {% elif a == 'off' %}mdi:power-off
@@ -578,9 +583,9 @@ PY
             {
               name = "AC Main Floor Action";
               unique_id = "ac_main_floor_action";
-              state = "{{ state_attr('climate.living_room_ac', 'hvac_action') | default('unknown') }}";
+              state = "{{ state_attr('climate.living_room', 'hvac_action') | default('unknown') }}";
               icon = ''
-                {% set a = state_attr('climate.living_room_ac', 'hvac_action') %}
+                {% set a = state_attr('climate.living_room', 'hvac_action') %}
                 {% if a == 'cooling' %}mdi:snowflake
                 {% elif a == 'idle' %}mdi:snowflake-off
                 {% elif a == 'off' %}mdi:power-off
