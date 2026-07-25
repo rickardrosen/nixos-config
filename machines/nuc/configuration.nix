@@ -538,27 +538,6 @@ PY
           # These helpers provide an "expected bypass window" for dashboards and debugging.
           sensor = [
             {
-              name = "ERV Indoor Reference Temperature";
-              unique_id = "erv_indoor_reference_temperature";
-              unit_of_measurement = "C";
-              device_class = "temperature";
-              availability = ''
-                {{
-                  has_value('sensor.alpstuga_air_quality_monitor_temperature_2')
-                  or has_value('sensor.alpstuga_air_quality_monitor_temperature')
-                }}
-              '';
-              state = ''
-                {% if has_value('sensor.alpstuga_air_quality_monitor_temperature_2') %}
-                  {{ states('sensor.alpstuga_air_quality_monitor_temperature_2') | float }}
-                {% elif has_value('sensor.alpstuga_air_quality_monitor_temperature') %}
-                  {{ states('sensor.alpstuga_air_quality_monitor_temperature') | float }}
-                {% else %}
-                  {{ none }}
-                {% endif %}
-              '';
-            }
-            {
               # Promote the AC unit's hvac_action attribute to a first-class sensor
               # state so it is recorded in history and can be graphed / counted.
               # cooling = compressor working, idle = on but throttled to minimum,
@@ -679,19 +658,6 @@ PY
       ];
 
       sensor = [
-        {
-          platform = "filter";
-          name = "ERV Indoor Reference Temperature Smoothed";
-          unique_id = "erv_indoor_reference_temperature_smoothed";
-          entity_id = "sensor.erv_indoor_reference_temperature";
-          filters = [
-            {
-              filter = "time_simple_moving_average";
-              window_size = "02:00";
-              precision = 1;
-            }
-          ];
-        }
         {
           # Occupied-zone reference for the living-room AC closed loop. The living-room
           # alpstuga monitor is the NO-SUFFIX entity (the _2 one is the basement),
