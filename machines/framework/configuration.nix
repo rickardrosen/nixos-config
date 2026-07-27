@@ -5,6 +5,8 @@
 { config, lib, pkgs, inputs, ... }:
 
 let
+  claude-code = pkgs.callPackage ../../pkgs/claude-code.nix { };
+
   ghosttyWithSimpleIme = pkgs.symlinkJoin {
     name = "ghostty-with-simple-ime";
     paths = [ pkgs.ghostty ];
@@ -257,6 +259,7 @@ in
     podman-compose
     opencode
     claude-code
+    gnupg # Verifies signed Claude Code release manifests during updates.
     ripgrep
     gh
     mcp-nixos
