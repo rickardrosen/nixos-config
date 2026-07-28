@@ -241,7 +241,7 @@ in
     wl-clipboard
     cliphist
     nodejs
-    devenv
+    inputs.devenv.packages.${pkgs.stdenv.hostPlatform.system}.devenv # pinned v2.2 (not nixpkgs')
     # inputs.swww.packages.${pkgs.stdenv.hostPlatform.system}.swww  # Commented out - not using swww
     ghosttyWithSimpleIme
     xwayland-satellite
@@ -311,9 +311,15 @@ in
     settings = {
       trusted-users = [ "root" "rickard" ];
       experimental-features = [ "nix-command" "flakes" ];
-      extra-substituters = [ "https://noctalia.cachix.org" ];
+      extra-substituters = [
+        "https://noctalia.cachix.org"
+        "https://devenv.cachix.org"
+        "https://cachix.cachix.org"
+      ];
       extra-trusted-public-keys = [
         "noctalia.cachix.org-1:pCOR47nnMEo5thcxNDtzWpOxNFQsBRglJzxWPp3dkU4="
+        "devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw="
+        "cachix.cachix.org-1:eWNHQldwUO7G2VkjpnjDbWwy4KQ/HNxht7H4SSoMckM="
       ];
     };
     gc = { automatic = true; dates = "weekly"; options = "--delete-older-than 7d"; };

@@ -12,6 +12,11 @@
     # Hardware configurations
     nixos-hardware.url = "github:NixOS/nixos-hardware/master";
 
+    # devenv CLI, pinned ahead of nixpkgs (nixos-unstable lags new releases).
+    # No nixpkgs.follows on purpose: overriding it changes the derivation hash
+    # and breaks devenv's binary cache (same rationale as noctalia below).
+    devenv.url = "github:cachix/devenv/v2.2";
+
     # Window manager / shell tools
     # swww = {
     #   url = "github:LGFae/swww";
