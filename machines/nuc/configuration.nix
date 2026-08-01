@@ -457,6 +457,7 @@ PY
     extraComponents = [
       "analytics"
       "default_config"
+      "esphome"
       "google_translate"
       "homekit"
       "isal"
