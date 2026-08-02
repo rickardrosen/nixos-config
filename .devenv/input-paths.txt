@@ -1,0 +1,8 @@
+/home/rickard/repos/rickardrosen/nixos-config/.devenv/bootstrap/bootstrapLib.nix
+/home/rickard/repos/rickardrosen/nixos-config/.devenv/bootstrap/default.nix
+/home/rickard/repos/rickardrosen/nixos-config/.devenv/bootstrap/resolve-lock.nix
+/home/rickard/repos/rickardrosen/nixos-config/devenv.local.nix
+/home/rickard/repos/rickardrosen/nixos-config/devenv.lock
+/home/rickard/.config/nixpkgs/overlays
+/home/rickard/.config/nixpkgs/overlays.nix
+/home/rickard/repos/rickardrosen/nixos-config/.env

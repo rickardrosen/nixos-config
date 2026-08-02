@@ -1,2 +1,5 @@
 /result
 /result-*
+/.esphome/
+/machines/nuc/esphome/secrets.yaml
+/machines/nuc/esphome/.esphome/

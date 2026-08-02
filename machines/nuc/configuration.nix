@@ -539,15 +539,8 @@ PY
           # These helpers provide an "expected bypass window" for dashboards and debugging.
           sensor = [
             {
-              # Promote the AC unit's hvac_action attribute to a first-class sensor
-              # state so it is recorded in history and can be graphed / counted.
-              # cooling = compressor working, idle = on but throttled to minimum,
-              # off = compressor stopped (the state we want to avoid cycling into).
-              # Read from the VERSATILE THERMOSTAT wrapper (climate.basement), not the
-              # raw MELCloud entity (climate.basement_ac) -- confirmed live (2026-07-25)
-              # that melcloud_home doesn't expose hvac_action at all (always "unknown"
-              # here), while VT's own over_climate hvac_action is correct and matches
-              # its is_device_active attribute.
+              # Promote basement VT hvac_action to a first-class sensor state so it is
+              # recorded in history and can be graphed / counted.
               name = "AC Basement Action";
               unique_id = "ac_basement_action";
               state = "{{ state_attr('climate.basement', 'hvac_action') | default('unknown') }}";
@@ -561,11 +554,24 @@ PY
               '';
             }
             {
+              # Main-floor CN105 path: derive action from compressor frequency + mode.
+              # This avoids relying on hvac_action, which can be unavailable depending on
+              # integration/device path.
               name = "AC Main Floor Action";
               unique_id = "ac_main_floor_action";
-              state = "{{ state_attr('climate.living_room', 'hvac_action') | default('unknown') }}";
+              state = ''
+                {% set mode = states('climate.living_room_cn105_lr_ac') %}
+                {% set freq_raw = states('sensor.living_room_cn105_lr_compressor_frequency') %}
+                {% set freq = freq_raw | float(0) %}
+                {% if mode in ['unknown', 'unavailable', 'none'] %}unknown
+                {% elif mode == 'off' %}off
+                {% elif freq_raw in ['unknown', 'unavailable', 'none'] %}unknown
+                {% elif freq > 0 %}cooling
+                {% else %}idle
+                {% endif %}
+              '';
               icon = ''
-                {% set a = state_attr('climate.living_room', 'hvac_action') %}
+                {% set a = states('sensor.ac_main_floor_action') %}
                 {% if a == 'cooling' %}mdi:snowflake
                 {% elif a == 'idle' %}mdi:snowflake-off
                 {% elif a == 'off' %}mdi:power-off
@@ -1037,7 +1043,7 @@ PY
             {
               # Re-evaluate promptly when the living-room AC target changes.
               platform = "template";
-              value_template = "{{ state_attr('climate.living_room', 'temperature') }}";
+              value_template = "{{ state_attr('climate.living_room_cn105_lr_ac', 'temperature') }}";
             }
           ];
           action = [
@@ -1045,16 +1051,16 @@ PY
               variables = {
                 # Cooling-only strategy, coordinated with the AC target and outdoor temp.
                 # Engage the bypass window (an enabling X) ONLY when BOTH:
-                #   - demand: living room is above its AC target (climate.living_room), and
+                #   - demand: living room is above its AC target (CN105 climate), and
                 #   - free:   outdoor is genuinely cooler than indoor (real free cooling).
                 # Otherwise disable (X=30). The enabling X reuses the prior `indoor - 4`
                 # value, so this change only ever *restricts* bypass to genuine free-cooling
                 # windows -- it can't create new behaviour whatever the exact X semantics.
                 # OA unavailable -> treated as free (defer to the ERV MCU's own check) so a
                 # sensor dropout doesn't freeze the bypass shut. Target falls back to 23 C
-                # until climate.living_room exists.
+                # until the living-room CN105 climate entity exists.
                 target_x = ''
-                  {% set target = state_attr('climate.living_room', 'temperature') | float(23) %}
+                  {% set target = state_attr('climate.living_room_cn105_lr_ac', 'temperature') | float(23) %}
                   {% set indoor = states('sensor.ac_main_floor_control_temperature') | float(target) %}
                   {% set oa = states('sensor.smart_erv_outdoor_temperature') | float(-999) %}
                   {% set demand = indoor > target + 0.3 %}
