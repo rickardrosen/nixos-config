@@ -5,7 +5,7 @@
 { config, lib, pkgs, inputs, ... }:
 
 let
-  claude-code = pkgs.callPackage ../../pkgs/claude-code.nix { };
+  claude-code = inputs.claude-code.packages.${pkgs.stdenv.hostPlatform.system}.default;
 
   ghosttyWithSimpleIme = pkgs.symlinkJoin {
     name = "ghostty-with-simple-ime";
@@ -196,6 +196,7 @@ in
     fish.enable = true;
     starship.enable = true;
     niri.enable = true;
+    nix-ld.enable= true;
   };
   # List packages installed in system profile.
   # You can use https://search.nixos.org/ to find more packages (and options).
@@ -241,7 +242,7 @@ in
     wl-clipboard
     cliphist
     nodejs
-    inputs.devenv.packages.${pkgs.stdenv.hostPlatform.system}.devenv # pinned v2.2 (not nixpkgs')
+    inputs.devenv.packages.${pkgs.stdenv.hostPlatform.system}.devenv
     # inputs.swww.packages.${pkgs.stdenv.hostPlatform.system}.swww  # Commented out - not using swww
     ghosttyWithSimpleIme
     xwayland-satellite
@@ -259,7 +260,7 @@ in
     podman-compose
     opencode
     claude-code
-    gnupg # Verifies signed Claude Code release manifests during updates.
+    gnupg
     ripgrep
     gh
     mcp-nixos

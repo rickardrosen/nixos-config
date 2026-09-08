@@ -2,6 +2,7 @@
 , stdenv
 , fetchurl
 , makeBinaryWrapper
+, gnutar
 , autoPatchelfHook
 , procps
 , ripgrep
@@ -10,15 +11,15 @@
 }:
 
 let
-  version = "2.1.220";
-  hash = "sha256-Z09h8g/zBvMQDPkgDkw2xLcCeLW+8ohFSYGblCqJyGM=";
+  version = "2.1.229";
+  hash = "sha512-YaENNcgyLJ8xjH1cdNTCAC7jLUzDTRISMQikArsvpBcEM32no6jmGgpVj61YQAOZedyUTLYxbKyq4TYGj7o2Vw==";
 
   platform = {
     x86_64-linux = "linux-x64";
   }.${stdenv.hostPlatform.system} or (throw "Claude Code is only packaged locally for x86_64-linux");
 
-  binary = fetchurl {
-    url = "https://downloads.claude.ai/claude-code-releases/${version}/${platform}/claude";
+  binaryTarball = fetchurl {
+    url = "https://registry.npmjs.org/@anthropic-ai/claude-code-${platform}/-/claude-code-${platform}-${version}.tgz";
     inherit hash;
   };
 in
@@ -29,14 +30,15 @@ stdenv.mkDerivation {
   dontUnpack = true;
   dontStrip = true; # Stripping corrupts Claude Code's embedded Bun trailer.
 
-  nativeBuildInputs = [ makeBinaryWrapper ]
+  nativeBuildInputs = [ makeBinaryWrapper gnutar ]
     ++ lib.optionals stdenv.hostPlatform.isElf [ autoPatchelfHook ];
 
   installPhase = ''
     runHook preInstall
 
     mkdir -p "$out/bin"
-    install -m755 ${binary} "$out/bin/.claude-unwrapped"
+    ${gnutar}/bin/tar -xzf ${binaryTarball} -C "$TMPDIR" package/claude
+    install -m755 "$TMPDIR/package/claude" "$out/bin/.claude-unwrapped"
     makeBinaryWrapper "$out/bin/.claude-unwrapped" "$out/bin/claude" \
       --inherit-argv0 \
       --set DISABLE_AUTOUPDATER 1 \

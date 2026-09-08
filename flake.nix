@@ -12,10 +12,13 @@
     # Hardware configurations
     nixos-hardware.url = "github:NixOS/nixos-hardware/master";
 
-    # devenv CLI, pinned ahead of nixpkgs (nixos-unstable lags new releases).
+    # Track upstream; flake.lock pins the exact revision until explicitly updated.
     # No nixpkgs.follows on purpose: overriding it changes the derivation hash
     # and breaks devenv's binary cache (same rationale as noctalia below).
-    devenv.url = "github:cachix/devenv/v2.2";
+    devenv.url = "github:cachix/devenv";
+
+    # Community packaging of Anthropic's native releases, updated independently.
+    claude-code.url = "github:sadjow/claude-code-nix";
 
     # Window manager / shell tools
     # swww = {

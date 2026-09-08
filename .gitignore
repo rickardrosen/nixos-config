@@ -1,5 +1,14 @@
 /result
 /result-*
+
+# Generated environment state, including environments started in subdirectories.
+.devenv/
+.direnv/
+
+# Ad-hoc devenv shells; neither directory defines a devenv project.
+/devenv.lock
+/machines/devenv.lock
+
 /.esphome/
 /machines/nuc/esphome/secrets.yaml
 /machines/nuc/esphome/.esphome/
