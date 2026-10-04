@@ -394,7 +394,6 @@ PY
 
   services.home-assistant = {
     enable = true;
-    openFirewall = false;
     # Keep MELCloud Home Python library explicitly available even if component
     # auto-detection is skipped by config-flow-only usage.
     extraPackages = ps: [ ps.aiomelcloudhome ];
