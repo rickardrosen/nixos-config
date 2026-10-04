@@ -469,7 +469,50 @@ PY
       # NB: cloud "tuya" intentionally not enabled -- the ERV is on the localtuya
       # custom component (independent of this) and the ALPSTUGA monitor is Matter.
     ];
-    config = {
+    config = let
+      # Tuning thresholds, not health limits. Separate enter/exit thresholds avoid
+      # oscillation; each tier also requires sustained readings (see below).
+      ervAirReadings = builtins.toJSON [
+        { entity = "sensor.alpstuga_air_quality_monitor_carbon_dioxide"; label = "living room CO2"; elevated = 800; elevated_exit = 700; poor = 1200; poor_exit = 1000; }
+        { entity = "sensor.alpstuga_air_quality_monitor_carbon_dioxide_2"; label = "basement CO2"; elevated = 800; elevated_exit = 700; poor = 1200; poor_exit = 1000; }
+        { entity = "sensor.alpstuga_air_quality_monitor_pm2_5"; label = "living room PM2.5"; elevated = 20; elevated_exit = 10; poor = 50; poor_exit = 35; }
+        { entity = "sensor.alpstuga_air_quality_monitor_pm2_5_2"; label = "basement PM2.5"; elevated = 20; elevated_exit = 10; poor = 50; poor_exit = 35; }
+        { entity = "sensor.alpstuga_air_quality_monitor_humidity"; label = "living room humidity"; elevated = 65; elevated_exit = 60; poor = 75; poor_exit = 70; }
+        { entity = "sensor.alpstuga_air_quality_monitor_humidity_2"; label = "basement humidity"; elevated = 65; elevated_exit = 60; poor = 75; poor_exit = 70; }
+        { entity = "sensor.ff_82_54_7f_7c_90_humidity"; label = "bathroom humidity"; elevated = 65; elevated_exit = 60; poor = 70; poor_exit = 65; }
+      ];
+      ervAirDemand = name: id: tier: {
+        inherit name;
+        unique_id = id;
+        icon = "mdi:air-filter";
+        delay_on = "00:03:00";
+        delay_off = "00:10:00";
+        state = ''
+          {% set readings = ${ervAirReadings} %}
+          {% set threshold = '${tier}_exit' if this.state == 'on' else '${tier}' %}
+          {% set ns = namespace(active=false) %}
+          {% for reading in readings %}
+            {% set value = states(reading.entity) %}
+            {% if is_number(value) and value | float(0) > reading[threshold] %}
+              {% set ns.active = true %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.active }}
+        '';
+        attributes.causes = ''
+          {% set readings = ${ervAirReadings} %}
+          {% set threshold = '${tier}_exit' if this.state == 'on' else '${tier}' %}
+          {% set ns = namespace(causes=[]) %}
+          {% for reading in readings %}
+            {% set value = states(reading.entity) %}
+            {% if is_number(value) and value | float(0) > reading[threshold] %}
+              {% set ns.causes = ns.causes + [reading.label ~ ' ' ~ value] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.causes }}
+        '';
+      };
+    in {
       default_config = { };
 
       homeassistant = {
@@ -500,10 +543,13 @@ PY
         ];
       };
 
-      # No input_select here on purpose: the ERV fully drives itself, nothing to
-      # pick or maintain. Priority, highest first: Boost (poor air) > Low (house
-      # empty) > seasonal baseline (see sensor.erv_baseline_speed below). See the
-      # `automation` block for the three automations that implement this.
+      # One user-facing control. Omitting initial restores manual selection after
+      # restart; Auto is the default on first creation.
+      input_select.erv_mode = {
+        name = "ERV Mode";
+        icon = "mdi:fan";
+        options = [ "Auto" "Speed 2" "Speed 6" "Speed 8" "Speed 10" ];
+      };
 
       # AC target temperatures, the seasonal on/off, and the closed-loop control that
       # used to live here (input_number targets + command-setpoint templates +
@@ -520,14 +566,36 @@ PY
           };
           sequence = [
             {
-              service = "select.select_option";
-              target = {
-                entity_id = [
+              condition = "template";
+              value_template = "{{ speed in ['Speed 2', 'Speed 6', 'Speed 8', 'Speed 10'] }}";
+            }
+            {
+              # Write each fan only when needed. One unavailable fan must not
+              # prevent updating the other; the controller retries on reconnect.
+              repeat = {
+                for_each = [
                   "select.smart_erv_smart_erv_supply_air"
                   "select.smart_erv_smart_erv_exhaust_air"
                 ];
+                sequence = [
+                  {
+                    "if" = [
+                      {
+                        condition = "template";
+                        value_template = "{{ has_value(repeat.item) and states(repeat.item) != speed and speed in (state_attr(repeat.item, 'options') or []) }}";
+                      }
+                    ];
+                    "then" = [
+                      {
+                        service = "select.select_option";
+                        target.entity_id = "{{ repeat.item }}";
+                        data.option = "{{ speed }}";
+                        continue_on_error = true;
+                      }
+                    ];
+                  }
+                ];
               };
-              data.option = "{{ speed }}";
             }
           ];
         };
@@ -537,6 +605,24 @@ PY
         {
           # The ERV Tuya profile does not expose a true bypass-open state.
           # These helpers provide an "expected bypass window" for dashboards and debugging.
+          binary_sensor = [
+            (ervAirDemand "ERV Air Elevated" "erv_air_elevated" "elevated")
+            (ervAirDemand "ERV Air Poor" "erv_air_poor" "poor")
+            {
+              name = "ERV Everyone Away";
+              unique_id = "erv_everyone_away";
+              icon = "mdi:home-export-outline";
+              delay_on = "00:15:00";
+              # Person entities are linked to phone trackers in the HA UI.
+              # Never infer away from missing people or unknown locations.
+              state = ''
+                {% set people = states.person | list %}
+                {{ is_number(states('zone.home')) and states('zone.home') | int(1) == 0
+                   and people | count > 0
+                   and people | selectattr('state', 'in', ['home', 'unknown', 'unavailable']) | list | count == 0 }}
+              '';
+            }
+          ];
           sensor = [
             {
               # Promote basement VT hvac_action to a first-class sensor state so it is
@@ -602,63 +688,60 @@ PY
               state = "{{ states.sensor.alpstuga_air_quality_monitor_temperature_2.last_updated }}";
             }
             {
-              # What the ERV should idle at whenever nothing overrides it (no Boost,
-              # house occupied). 6 is the OVK-certified minimum for this house
-              # (tuned to protect heat-recovery efficiency: slower air spends more
-              # time in the exchanger core). 8 is quieter AND moves more air than 6,
-              # but trades a bit of that efficiency -- so it's only used when there's
-              # no heat/cool actually worth recovering. Read by erv_apply_baseline
-              # and by the reason sensor below, so the logic only lives in one place.
-              name = "ERV Baseline Speed";
-              unique_id = "erv_baseline_speed";
+              name = "ERV Target Speed";
+              unique_id = "erv_target_speed";
               icon = "mdi:fan";
+              availability = "{{ has_value('input_select.erv_mode') }}";
               state = ''
-                {% set cooling = is_state('sensor.ac_basement_action', 'cooling')
-                                  or is_state('sensor.ac_main_floor_action', 'cooling') %}
-                {% set cold_outside = states('sensor.smart_erv_outdoor_temperature') | float(99) < 13 %}
-                {% if cooling or cold_outside %}Speed 6
-                {% else %}Speed 8
+                {% set mode = states('input_select.erv_mode') %}
+                {% if mode in ['Speed 2', 'Speed 6', 'Speed 8', 'Speed 10'] %}{{ mode }}
+                {% elif is_state('binary_sensor.erv_everyone_away', 'on') %}Speed 2
+                {% elif is_state('binary_sensor.erv_air_poor', 'on') %}Speed 10
+                {% elif is_state('binary_sensor.erv_air_elevated', 'on') %}Speed 8
+                {% else %}Speed 6
                 {% endif %}
               '';
             }
             {
-              # Plain-language answer to "why is the ERV doing this right now" --
-              # independent of Logbook automation attribution, which only ever shows
-              # the last thing to touch the entity. Re-evaluates automatically
-              # whenever any referenced entity changes (standard template-sensor
-              # behaviour, same as the other sensors in this block).
               name = "ERV Mode Reason";
               unique_id = "erv_mode_reason";
               icon = "mdi:information-outline";
               state = ''
-                {% set speed = states('select.smart_erv_smart_erv_supply_air') %}
-                {% if speed == 'Speed 10' %}
-                  {% set co2_1 = states('sensor.alpstuga_air_quality_monitor_carbon_dioxide') | float(0) %}
-                  {% set co2_2 = states('sensor.alpstuga_air_quality_monitor_carbon_dioxide_2') | float(0) %}
-                  {% set pm_1 = states('sensor.alpstuga_air_quality_monitor_pm2_5') | float(0) %}
-                  {% set pm_2 = states('sensor.alpstuga_air_quality_monitor_pm2_5_2') | float(0) %}
-                  {% set hum_1 = states('sensor.alpstuga_air_quality_monitor_humidity') | float(0) %}
-                  {% set hum_2 = states('sensor.alpstuga_air_quality_monitor_humidity_2') | float(0) %}
-                  {% set bath_hum = states('sensor.ff_82_54_7f_7c_90_humidity') | float(0) %}
-                  {% if co2_1 > 800 %}Auto: Boost - living room CO2 {{ co2_1 | round }} ppm
-                  {% elif co2_2 > 800 %}Auto: Boost - basement CO2 {{ co2_2 | round }} ppm
-                  {% elif pm_1 > 20 %}Auto: Boost - living room PM2.5 {{ pm_1 | round }} ug/m3
-                  {% elif pm_2 > 20 %}Auto: Boost - basement PM2.5 {{ pm_2 | round }} ug/m3
-                  {% elif hum_1 > 65 %}Auto: Boost - living room humidity {{ hum_1 | round }}%
-                  {% elif hum_2 > 65 %}Auto: Boost - basement humidity {{ hum_2 | round }}%
-                  {% elif bath_hum > 65 %}Auto: Boost - bathroom humidity {{ bath_hum | round }}%
-                  {% else %}Auto: Boost - waiting for air quality to recover
-                  {% endif %}
-                {% elif speed == 'Speed 2' and states('zone.home') | int(1) < 1 %}
-                  Auto: Low - house is empty
-                {% elif is_state('sensor.ac_basement_action', 'cooling') or is_state('sensor.ac_main_floor_action', 'cooling') %}
-                  Auto: Baseline {{ speed }} - AC cooling, protecting heat recovery
-                {% elif states('sensor.smart_erv_outdoor_temperature') | float(99) < 13 %}
-                  Auto: Baseline {{ speed }} - cold outside, protecting heat recovery
+                {% set mode = states('input_select.erv_mode') %}
+                {% if mode in ['Speed 2', 'Speed 6', 'Speed 8', 'Speed 10'] %}
+                  Manual: {{ mode }} - held until Auto is selected
+                {% elif is_state('binary_sensor.erv_everyone_away', 'on') %}
+                  Auto: Low - everyone away for 15 minutes
+                {% elif is_state('binary_sensor.erv_air_poor', 'on') %}
+                  {% set causes = state_attr('binary_sensor.erv_air_poor', 'causes') or [] %}
+                  Auto: Boost - {{ causes | join(', ') if causes else 'waiting for sustained recovery' }}
+                {% elif is_state('binary_sensor.erv_air_elevated', 'on') %}
+                  {% set causes = state_attr('binary_sensor.erv_air_elevated', 'causes') or [] %}
+                  Auto: Speed 8 - {{ causes | join(', ') if causes else 'waiting for sustained recovery' }}
                 {% else %}
-                  Auto: Baseline {{ speed }} - mild weather, prioritising quiet + airflow
+                  Auto: Normal - Speed 6
                 {% endif %}
               '';
+              attributes = {
+                missing_sensors = ''
+                  {% set readings = ${ervAirReadings} %}
+                  {% set ns = namespace(missing=[]) %}
+                  {% for reading in readings %}
+                    {% if not is_number(states(reading.entity)) %}
+                      {% set ns.missing = ns.missing + [reading.entity] %}
+                    {% endif %}
+                  {% endfor %}
+                  {{ ns.missing }}
+                '';
+                target_speed = "{{ states('sensor.erv_target_speed') }}";
+                supply_speed = "{{ states('select.smart_erv_smart_erv_supply_air') }}";
+                exhaust_speed = "{{ states('select.smart_erv_smart_erv_exhaust_air') }}";
+                presence_uncertain = ''
+                  {% set people = states.person | list %}
+                  {{ not is_number(states('zone.home')) or people | count == 0
+                     or people | selectattr('state', 'in', ['unknown', 'unavailable']) | list | count > 0 }}
+                '';
+              };
             }
           ];
         }
@@ -804,226 +887,48 @@ PY
 
       automation = [
         {
-          id = "erv_boost_on_poor_air";
-          alias = "ERV: Boost on poor air";
-          mode = "single";
+          id = "erv_apply_speed";
+          alias = "ERV: Apply Auto or manual speed";
+          mode = "restart";
           trigger = [
             {
-              platform = "numeric_state";
-              entity_id = "sensor.alpstuga_air_quality_monitor_carbon_dioxide";
-              above = 800;
+              platform = "state";
+              entity_id = "sensor.erv_target_speed";
             }
-            {
-              platform = "numeric_state";
-              entity_id = "sensor.alpstuga_air_quality_monitor_carbon_dioxide_2";
-              above = 800;
-            }
-            {
-              platform = "numeric_state";
-              entity_id = "sensor.alpstuga_air_quality_monitor_pm2_5";
-              above = 20;
-            }
-            {
-              platform = "numeric_state";
-              entity_id = "sensor.alpstuga_air_quality_monitor_pm2_5_2";
-              above = 20;
-            }
-            {
-              platform = "numeric_state";
-              entity_id = "sensor.alpstuga_air_quality_monitor_humidity";
-              above = 65;
-            }
-            {
-              platform = "numeric_state";
-              entity_id = "sensor.alpstuga_air_quality_monitor_humidity_2";
-              above = 65;
-            }
-            {
-              # Basement bathroom humidity (LK Systems sensor).
-              platform = "numeric_state";
-              entity_id = "sensor.ff_82_54_7f_7c_90_humidity";
-              above = 65;
-            }
-          ];
-          condition = [
-            {
-              # Skip if already boosted, so this doesn't re-fire (and spam the
-              # Logbook) on every subsequent sensor tick while air stays bad.
-              condition = "not";
-              conditions = [
-                {
-                  condition = "state";
-                  entity_id = "select.smart_erv_smart_erv_supply_air";
-                  state = "Speed 10";
-                }
-              ];
-            }
-          ];
-          action = [
-            {
-              # Called directly (not via a reactive middleman automation) so the
-              # Logbook attributes the fan-speed entity change to THIS
-              # automation -- the actual "why".
-              service = "script.erv_set_speed";
-              data.speed = "Speed 10";
-            }
-          ];
-        }
-        {
-          id = "erv_low_when_empty";
-          alias = "ERV: Low mode when nobody home";
-          mode = "single";
-          trigger = [
-            {
-              platform = "numeric_state";
-              entity_id = "zone.home";
-              below = 1;
-              for = "00:15:00";
-            }
-          ];
-          condition = [
-            {
-              # Poor-air Boost always outranks the away override.
-              condition = "not";
-              conditions = [
-                {
-                  condition = "state";
-                  entity_id = "select.smart_erv_smart_erv_supply_air";
-                  state = "Speed 10";
-                }
-              ];
-            }
-          ];
-          action = [
-            {
-              service = "script.erv_set_speed";
-              data.speed = "Speed 2";
-            }
-          ];
-        }
-        {
-          id = "erv_apply_baseline";
-          alias = "ERV: Apply baseline speed";
-          mode = "single";
-          trigger = [
-            # Air quality has been good for 15 straight minutes (ends a Boost).
-            # Mirrors the old dual-hysteresis design: 800/20/65 to enter Boost,
-            # 700/10/58 sustained to leave it.
-            {
-              platform = "numeric_state";
-              entity_id = "sensor.alpstuga_air_quality_monitor_carbon_dioxide";
-              below = 700;
-              for = "00:15:00";
-            }
-            {
-              platform = "numeric_state";
-              entity_id = "sensor.alpstuga_air_quality_monitor_carbon_dioxide_2";
-              below = 700;
-              for = "00:15:00";
-            }
-            {
-              platform = "numeric_state";
-              entity_id = "sensor.alpstuga_air_quality_monitor_pm2_5";
-              below = 10;
-              for = "00:15:00";
-            }
-            {
-              platform = "numeric_state";
-              entity_id = "sensor.alpstuga_air_quality_monitor_pm2_5_2";
-              below = 10;
-              for = "00:15:00";
-            }
-            {
-              platform = "numeric_state";
-              entity_id = "sensor.alpstuga_air_quality_monitor_humidity";
-              below = 58;
-              for = "00:15:00";
-            }
-            {
-              platform = "numeric_state";
-              entity_id = "sensor.alpstuga_air_quality_monitor_humidity_2";
-              below = 58;
-              for = "00:15:00";
-            }
-            {
-              platform = "numeric_state";
-              entity_id = "sensor.ff_82_54_7f_7c_90_humidity";
-              below = 58;
-              for = "00:15:00";
-            }
-            # Someone came home after an away-triggered Low.
             {
               platform = "homeassistant";
               event = "start";
             }
             {
-              platform = "numeric_state";
-              entity_id = "zone.home";
-              above = 0;
-              for = "00:00:30";
+              platform = "event";
+              event_type = "event_template_reloaded";
             }
-            # Season/AC-load changed, which flips sensor.erv_baseline_speed
-            # between Speed 6 and Speed 8.
             {
               platform = "state";
               entity_id = [
-                "sensor.ac_basement_action"
-                "sensor.ac_main_floor_action"
+                "select.smart_erv_smart_erv_supply_air"
+                "select.smart_erv_smart_erv_exhaust_air"
               ];
+              from = "unavailable";
             }
             {
-              platform = "numeric_state";
-              entity_id = "sensor.smart_erv_outdoor_temperature";
-              above = 13;
+              platform = "state";
+              entity_id = [
+                "select.smart_erv_smart_erv_supply_air"
+                "select.smart_erv_smart_erv_exhaust_air"
+              ];
+              from = "unknown";
             }
             {
-              platform = "numeric_state";
-              entity_id = "sensor.smart_erv_outdoor_temperature";
-              below = 13;
-            }
-            # Safety-net re-check, catches any case the specific triggers above miss.
-            {
+              # Reconcile device drift or missed writes without redundant commands.
               platform = "time_pattern";
-              minutes = "/15";
-            }
-          ];
-          condition = [
-            {
-              # Checks the LIVE air-quality numbers, not the fan's current speed --
-              # deliberately, not an oversight. This automation's whole job includes
-              # ENDING a Boost, which means it must be allowed to run while the fan
-              # is still sitting at Speed 10; gating on "fan isn't at Speed 10" would
-              # make that impossible (a boost could never turn itself off, since the
-              # condition unlocking the turn-off action would require it already be
-              # off). So: skip only if air is still genuinely bad right now: it's
-              # safe to (re)apply Low/baseline otherwise, whatever the fan is doing.
-              condition = "template";
-              value_template = ''
-                {% set co2_1 = states('sensor.alpstuga_air_quality_monitor_carbon_dioxide') | float(9999) %}
-                {% set co2_2 = states('sensor.alpstuga_air_quality_monitor_carbon_dioxide_2') | float(9999) %}
-                {% set pm_1 = states('sensor.alpstuga_air_quality_monitor_pm2_5') | float(9999) %}
-                {% set pm_2 = states('sensor.alpstuga_air_quality_monitor_pm2_5_2') | float(9999) %}
-                {% set hum_1 = states('sensor.alpstuga_air_quality_monitor_humidity') | float(9999) %}
-                {% set hum_2 = states('sensor.alpstuga_air_quality_monitor_humidity_2') | float(9999) %}
-                {% set bath_hum = states('sensor.ff_82_54_7f_7c_90_humidity') | float(9999) %}
-                {{ co2_1 < 700 and co2_2 < 700 and pm_1 < 10 and pm_2 < 10
-                   and hum_1 < 58 and hum_2 < 58 and bath_hum < 58 }}
-              '';
+              minutes = "/5";
             }
           ];
           action = [
             {
-              variables = {
-                target_speed = ''
-                  {% if states('zone.home') | int(0) < 1 %}Speed 2
-                  {% else %}{{ states('sensor.erv_baseline_speed') }}
-                  {% endif %}
-                '';
-              };
-            }
-            {
               service = "script.erv_set_speed";
-              data.speed = "{{ target_speed }}";
+              data.speed = "{{ states('sensor.erv_target_speed') }}";
             }
           ];
         }
