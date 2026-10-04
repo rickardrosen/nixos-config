@@ -603,6 +603,13 @@ PY
             (ervAirDemand "ERV Air Elevated" "erv_air_elevated" "elevated")
             (ervAirDemand "ERV Air Poor" "erv_air_poor" "poor")
             {
+              name = "ERV Night";
+              unique_id = "erv_night";
+              icon = "mdi:weather-night";
+              # now() re-evaluates every minute and catches up after HA restarts.
+              state = "{{ now().hour >= 23 or now().hour * 60 + now().minute < 390 }}";
+            }
+            {
               name = "ERV Everyone Away";
               unique_id = "erv_everyone_away";
               icon = "mdi:home-export-outline";
@@ -692,6 +699,7 @@ PY
                 {% elif is_state('binary_sensor.erv_everyone_away', 'on') %}Speed 2
                 {% elif is_state('binary_sensor.erv_air_poor', 'on') %}Speed 10
                 {% elif is_state('binary_sensor.erv_air_elevated', 'on') %}Speed 8
+                {% elif is_state('binary_sensor.erv_night', 'on') %}Speed 2
                 {% else %}Speed 6
                 {% endif %}
               '';
@@ -712,6 +720,8 @@ PY
                 {% elif is_state('binary_sensor.erv_air_elevated', 'on') %}
                   {% set causes = state_attr('binary_sensor.erv_air_elevated', 'causes') or [] %}
                   Auto: Speed 8 - {{ causes | join(', ') if causes else 'waiting for sustained recovery' }}
+                {% elif is_state('binary_sensor.erv_night', 'on') %}
+                  Auto: Night - Speed 2 while air quality is good
                 {% else %}
                   Auto: Normal - Speed 6
                 {% endif %}
@@ -880,6 +890,33 @@ PY
       ];
 
       automation = [
+        {
+          id = "basement_alpstuga_display_schedule";
+          alias = "Basement ALPSTUGA: Display off overnight";
+          mode = "restart";
+          trigger = [
+            { platform = "time"; at = "22:00:00"; }
+            { platform = "time"; at = "06:30:00"; }
+            { platform = "homeassistant"; event = "start"; }
+            { platform = "time_pattern"; minutes = "/5"; }
+          ];
+          action = [
+            {
+              variables = {
+                display_state = "{{ 'off' if now().hour >= 22 or now().hour * 60 + now().minute < 390 else 'on' }}";
+              };
+            }
+            {
+              condition = "template";
+              value_template = "{{ has_value('switch.alpstuga_air_quality_monitor_2') and states('switch.alpstuga_air_quality_monitor_2') != display_state }}";
+            }
+            {
+              # The device stays powered; sensing continues with the display off.
+              service = "{{ 'switch.turn_off' if display_state == 'off' else 'switch.turn_on' }}";
+              target.entity_id = "switch.alpstuga_air_quality_monitor_2";
+            }
+          ];
+        }
         {
           id = "erv_apply_speed";
           alias = "ERV: Apply Auto or manual speed";
