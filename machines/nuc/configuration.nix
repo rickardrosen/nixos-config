@@ -533,14 +533,9 @@ PY
         }
       ];
 
-      http = {
-        server_host = "0.0.0.0";
-        use_x_forwarded_for = true;
-        trusted_proxies = [
-          "127.0.0.1"
-          "::1"
-        ];
-      };
+      # HTTP settings were imported into HA's UI (Settings > System > Network).
+      # Keep port 8123, Trust X-Forwarded-For, and trusted proxies 127.0.0.1 / ::1
+      # there for the local Caddy reverse proxy; HTTP YAML is being retired.
 
       # One user-facing control. Omitting initial restores manual selection after
       # restart; Auto is the default on first creation.
