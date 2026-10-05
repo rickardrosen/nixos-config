@@ -469,17 +469,19 @@ PY
       # custom component (independent of this) and the ALPSTUGA monitor is Matter.
     ];
     config = let
-      # Tuning thresholds, not health limits. Separate enter/exit thresholds avoid
-      # oscillation; each tier also requires sustained readings (see below).
+      # Use the ALPSTUGA's own Matter air-quality rating: fair/moderate request
+      # Speed 8, poor or worse request Speed 10. Bathroom humidity is independent.
+      # Humidity has separate enter/exit thresholds; both tiers require sustained
+      # readings and recovery (see below).
       ervAirReadings = builtins.toJSON [
-        { entity = "sensor.alpstuga_air_quality_monitor_carbon_dioxide"; label = "living room CO2"; elevated = 800; elevated_exit = 700; poor = 1200; poor_exit = 1000; }
-        { entity = "sensor.alpstuga_air_quality_monitor_carbon_dioxide_2"; label = "basement CO2"; elevated = 800; elevated_exit = 700; poor = 1200; poor_exit = 1000; }
-        { entity = "sensor.alpstuga_air_quality_monitor_pm2_5"; label = "living room PM2.5"; elevated = 20; elevated_exit = 10; poor = 50; poor_exit = 35; }
-        { entity = "sensor.alpstuga_air_quality_monitor_pm2_5_2"; label = "basement PM2.5"; elevated = 20; elevated_exit = 10; poor = 50; poor_exit = 35; }
-        { entity = "sensor.alpstuga_air_quality_monitor_humidity"; label = "living room humidity"; elevated = 65; elevated_exit = 60; poor = 75; poor_exit = 70; }
-        { entity = "sensor.alpstuga_air_quality_monitor_humidity_2"; label = "basement humidity"; elevated = 65; elevated_exit = 60; poor = 75; poor_exit = 70; }
-        { entity = "sensor.ff_82_54_7f_7c_90_humidity"; label = "bathroom humidity"; elevated = 65; elevated_exit = 60; poor = 70; poor_exit = 65; }
+        { entity = "sensor.alpstuga_air_quality_monitor_air_quality"; label = "living room air quality"; states = true; }
+        { entity = "sensor.alpstuga_air_quality_monitor_air_quality_2"; label = "basement air quality"; states = true; }
+        { entity = "sensor.ff_82_54_7f_7c_90_humidity"; label = "basement bathroom humidity"; elevated = 65; elevated_exit = 60; poor = 70; poor_exit = 65; }
       ];
+      ervAirQualityStates = builtins.toJSON {
+        elevated = [ "fair" "moderate" "poor" "very_poor" "extremely_poor" ];
+        poor = [ "poor" "very_poor" "extremely_poor" ];
+      };
       ervAirDemand = name: id: tier: {
         inherit name;
         unique_id = id;
@@ -488,11 +490,13 @@ PY
         delay_off = "00:10:00";
         state = ''
           {% set readings = ${ervAirReadings} %}
+          {% set quality_states = ${ervAirQualityStates} %}
           {% set threshold = '${tier}_exit' if this.state == 'on' else '${tier}' %}
           {% set ns = namespace(active=false) %}
           {% for reading in readings %}
             {% set value = states(reading.entity) %}
-            {% if is_number(value) and value | float(0) > reading[threshold] %}
+            {% if (reading.get('states', false) and value in quality_states['${tier}'])
+               or (not reading.get('states', false) and is_number(value) and value | float(0) > reading[threshold]) %}
               {% set ns.active = true %}
             {% endif %}
           {% endfor %}
@@ -500,11 +504,13 @@ PY
         '';
         attributes.causes = ''
           {% set readings = ${ervAirReadings} %}
+          {% set quality_states = ${ervAirQualityStates} %}
           {% set threshold = '${tier}_exit' if this.state == 'on' else '${tier}' %}
           {% set ns = namespace(causes=[]) %}
           {% for reading in readings %}
             {% set value = states(reading.entity) %}
-            {% if is_number(value) and value | float(0) > reading[threshold] %}
+            {% if (reading.get('states', false) and value in quality_states['${tier}'])
+               or (not reading.get('states', false) and is_number(value) and value | float(0) > reading[threshold]) %}
               {% set ns.causes = ns.causes + [reading.label ~ ' ' ~ value] %}
             {% endif %}
           {% endfor %}
@@ -731,7 +737,9 @@ PY
                   {% set readings = ${ervAirReadings} %}
                   {% set ns = namespace(missing=[]) %}
                   {% for reading in readings %}
-                    {% if not is_number(states(reading.entity)) %}
+                    {% set value = states(reading.entity) %}
+                    {% if (reading.get('states', false) and value not in ['good', 'fair', 'moderate', 'poor', 'very_poor', 'extremely_poor'])
+                       or (not reading.get('states', false) and not is_number(value)) %}
                       {% set ns.missing = ns.missing + [reading.entity] %}
                     {% endif %}
                   {% endfor %}
