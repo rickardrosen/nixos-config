@@ -1,0 +1,22 @@
+# Optional copy for embedding in another dashboard as a Manual card.
+# The NUC configuration now installs an ERV sidebar dashboard automatically.
+# Leave ERV Mode on Auto to use the tuned levels.
+# Low is shared by nighttime and absence. Changes apply when a level is active.
+type: entities
+title: ERV
+show_header_toggle: false
+entities:
+  - entity: input_select.erv_mode
+    name: Mode
+  - entity: input_select.erv_low_speed
+    name: Low
+  - entity: input_select.erv_normal_speed
+    name: Normal
+  - entity: input_select.erv_high_speed
+    name: High
+  - entity: input_select.erv_boost_speed
+    name: Boost
+  - entity: sensor.erv_target_speed
+    name: Target speed
+  - entity: sensor.erv_mode_reason
+    name: Reason

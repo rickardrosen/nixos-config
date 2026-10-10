@@ -394,6 +394,60 @@ PY
 
   services.home-assistant = {
     enable = true;
+    # NixOS installs ui-lovelace.yaml and registers this additional dashboard.
+    # Preset selections still live in the helpers and persist across restarts.
+    lovelaceConfig = {
+      title = "ERV";
+      views = [
+        {
+          title = "ERV";
+          path = "erv";
+          icon = "mdi:fan";
+          cards = [
+            {
+              type = "entities";
+              title = "ERV";
+              show_header_toggle = false;
+              entities = [
+                { entity = "input_select.erv_mode"; name = "Mode"; }
+                { entity = "input_select.erv_low_speed"; name = "Low"; }
+                { entity = "input_select.erv_normal_speed"; name = "Normal"; }
+                { entity = "input_select.erv_high_speed"; name = "High"; }
+                { entity = "input_select.erv_boost_speed"; name = "Boost"; }
+                { entity = "sensor.erv_target_speed"; name = "Target speed"; }
+                { entity = "sensor.erv_mode_reason"; name = "Reason"; }
+              ];
+            }
+            {
+              type = "markdown";
+              content = "Leave **Mode** on **Auto** to use the tuned levels. Low is shared by nighttime and absence. Changes apply when a level is active.";
+            }
+            {
+              type = "entities";
+              title = "Presence";
+              show_header_toggle = false;
+              entities = [
+                { entity = "zone.home"; name = "People at home"; }
+                { entity = "binary_sensor.erv_everyone_away"; name = "Everyone away for 15 minutes"; }
+              ];
+            }
+            {
+              type = "markdown";
+              title = "Phone tracking";
+              content = ''
+                {% for person in states.person %}
+                - **{{ person.name }}**: {{ person.state }} (tracker: {{ person.attributes.get('source') or 'none linked' }})
+                {% else %}
+                No people configured. Add yourself under **Settings → People** and select your phone as a tracking device.
+                {% endfor %}
+
+                Missing or unknown presence prevents automatic away mode. Check **Settings → People** and the phone's background location permissions if tracking stops updating.
+              '';
+            }
+          ];
+        }
+      ];
+    };
     # Keep MELCloud Home Python library explicitly available even if component
     # auto-detection is skipped by config-flow-only usage.
     extraPackages = ps: [ ps.aiomelcloudhome ];
@@ -470,9 +524,19 @@ PY
     ];
     config = let
       # Use the ALPSTUGA's own Matter air-quality rating: fair/moderate request
-      # Speed 8, poor or worse request Speed 10. Bathroom humidity is independent.
+      # High, poor or worse request Boost. Bathroom humidity is independent.
       # Humidity has separate enter/exit thresholds; both tiers require sustained
       # readings and recovery (see below).
+      ervSpeedOptions = builtins.genList (i: "Speed ${toString (i + 1)}") 10;
+      ervSpeedHelper = name: default: {
+        inherit name;
+        icon = "mdi:fan";
+        # First option is the first-creation default. No initial: retain dashboard
+        # tuning across restarts instead of resetting it to the Nix default.
+        options = [ default ] ++ builtins.filter (speed: speed != default) ervSpeedOptions;
+      };
+      # A missing helper during startup/reload uses the original speed.
+      ervPresetSpeed = level: default: ''{{ states('input_select.erv_${level}_speed') if states('input_select.erv_${level}_speed') in ${builtins.toJSON ervSpeedOptions} else '${default}' }}'';
       ervAirReadings = builtins.toJSON [
         { entity = "sensor.alpstuga_air_quality_monitor_air_quality"; label = "living room air quality"; states = true; }
         { entity = "sensor.alpstuga_air_quality_monitor_air_quality_2"; label = "basement air quality"; states = true; }
@@ -520,6 +584,14 @@ PY
     in {
       default_config = { };
 
+      lovelace.dashboards.nixos-lovelace = {
+        mode = "yaml";
+        filename = "ui-lovelace.yaml";
+        title = "ERV";
+        icon = "mdi:fan";
+        show_in_sidebar = true;
+      };
+
       homeassistant = {
         latitude = 59.322333;
         longitude = 17.989417;
@@ -543,13 +615,18 @@ PY
       # Keep port 8123, Trust X-Forwarded-For, and trusted proxies 127.0.0.1 / ::1
       # there for the local Caddy reverse proxy; HTTP YAML is being retired.
 
-      # One user-facing control. Omitting initial restores manual selection after
+      # Mode override. Omitting initial restores manual selection after
       # restart; Auto is the default on first creation.
       input_select.erv_mode = {
         name = "ERV Mode";
         icon = "mdi:fan";
         options = [ "Auto" "Speed 2" "Speed 6" "Speed 8" "Speed 10" ];
       };
+      # Automatic levels stay automatic; these controls tune their fan speeds.
+      input_select.erv_low_speed = ervSpeedHelper "ERV Low Speed" "Speed 2";
+      input_select.erv_normal_speed = ervSpeedHelper "ERV Normal Speed" "Speed 6";
+      input_select.erv_high_speed = ervSpeedHelper "ERV High Speed" "Speed 8";
+      input_select.erv_boost_speed = ervSpeedHelper "ERV Boost Speed" "Speed 10";
 
       # AC target temperatures, the seasonal on/off, and the closed-loop control that
       # used to live here (input_number targets + command-setpoint templates +
@@ -567,7 +644,7 @@ PY
           sequence = [
             {
               condition = "template";
-              value_template = "{{ speed in ['Speed 2', 'Speed 6', 'Speed 8', 'Speed 10'] }}";
+              value_template = "{{ speed in ${builtins.toJSON ervSpeedOptions} }}";
             }
             {
               # Write each fan only when needed. One unavailable fan must not
@@ -702,11 +779,11 @@ PY
               state = ''
                 {% set mode = states('input_select.erv_mode') %}
                 {% if mode in ['Speed 2', 'Speed 6', 'Speed 8', 'Speed 10'] %}{{ mode }}
-                {% elif is_state('binary_sensor.erv_everyone_away', 'on') %}Speed 2
-                {% elif is_state('binary_sensor.erv_air_poor', 'on') %}Speed 10
-                {% elif is_state('binary_sensor.erv_air_elevated', 'on') %}Speed 8
-                {% elif is_state('binary_sensor.erv_night', 'on') %}Speed 2
-                {% else %}Speed 6
+                {% elif is_state('binary_sensor.erv_everyone_away', 'on') %}${ervPresetSpeed "low" "Speed 2"}
+                {% elif is_state('binary_sensor.erv_air_poor', 'on') %}${ervPresetSpeed "boost" "Speed 10"}
+                {% elif is_state('binary_sensor.erv_air_elevated', 'on') %}${ervPresetSpeed "high" "Speed 8"}
+                {% elif is_state('binary_sensor.erv_night', 'on') %}${ervPresetSpeed "low" "Speed 2"}
+                {% else %}${ervPresetSpeed "normal" "Speed 6"}
                 {% endif %}
               '';
             }
@@ -719,17 +796,17 @@ PY
                 {% if mode in ['Speed 2', 'Speed 6', 'Speed 8', 'Speed 10'] %}
                   Manual: {{ mode }} - held until Auto is selected
                 {% elif is_state('binary_sensor.erv_everyone_away', 'on') %}
-                  Auto: Low - everyone away for 15 minutes
+                  Auto: Low - ${ervPresetSpeed "low" "Speed 2"} - everyone away for 15 minutes
                 {% elif is_state('binary_sensor.erv_air_poor', 'on') %}
                   {% set causes = state_attr('binary_sensor.erv_air_poor', 'causes') or [] %}
-                  Auto: Boost - {{ causes | join(', ') if causes else 'waiting for sustained recovery' }}
+                  Auto: Boost - ${ervPresetSpeed "boost" "Speed 10"} - {{ causes | join(', ') if causes else 'waiting for sustained recovery' }}
                 {% elif is_state('binary_sensor.erv_air_elevated', 'on') %}
                   {% set causes = state_attr('binary_sensor.erv_air_elevated', 'causes') or [] %}
-                  Auto: Speed 8 - {{ causes | join(', ') if causes else 'waiting for sustained recovery' }}
+                  Auto: High - ${ervPresetSpeed "high" "Speed 8"} - {{ causes | join(', ') if causes else 'waiting for sustained recovery' }}
                 {% elif is_state('binary_sensor.erv_night', 'on') %}
-                  Auto: Night - Speed 2 while air quality is good
+                  Auto: Night - ${ervPresetSpeed "low" "Speed 2"} while air quality is good
                 {% else %}
-                  Auto: Normal - Speed 6
+                  Auto: Normal - ${ervPresetSpeed "normal" "Speed 6"}
                 {% endif %}
               '';
               attributes = {
