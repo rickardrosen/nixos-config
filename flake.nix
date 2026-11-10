@@ -20,6 +20,9 @@
     # Community packaging of Anthropic's native releases, updated independently.
     claude-code.url = "github:sadjow/claude-code-nix";
 
+    # Official packaging of Herdr's prebuilt releases; retain upstream inputs for cache hits.
+    herdr.url = "github:herdrdev/herdr-nix";
+
     # Window manager / shell tools
     # swww = {
     #   url = "github:LGFae/swww";

@@ -206,6 +206,7 @@ in
     git
     jq
     kitty
+    firefox
     google-chrome
     fuzzel
     swaylock
@@ -242,13 +243,13 @@ in
     wl-clipboard
     cliphist
     nodejs
+    inputs.herdr.packages.${pkgs.stdenv.hostPlatform.system}.default
     inputs.devenv.packages.${pkgs.stdenv.hostPlatform.system}.devenv
     # inputs.swww.packages.${pkgs.stdenv.hostPlatform.system}.swww  # Commented out - not using swww
     ghosttyWithSimpleIme
     xwayland-satellite
     niriswitcher
     pwvucontrol
-    pw-volume
     yubioath-flutter
     opensc
     yubico-piv-tool
@@ -316,11 +317,13 @@ in
         "https://noctalia.cachix.org"
         "https://devenv.cachix.org"
         "https://cachix.cachix.org"
+        "https://herdr.cachix.org"
       ];
       extra-trusted-public-keys = [
         "noctalia.cachix.org-1:pCOR47nnMEo5thcxNDtzWpOxNFQsBRglJzxWPp3dkU4="
         "devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw="
         "cachix.cachix.org-1:eWNHQldwUO7G2VkjpnjDbWwy4KQ/HNxht7H4SSoMckM="
+        "herdr.cachix.org-1:3nH7IStRsS0ASfdonA0DCRR2ZrSCeWitZ7Kwew0cR4I="
       ];
     };
     gc = { automatic = true; dates = "weekly"; options = "--delete-older-than 7d"; };

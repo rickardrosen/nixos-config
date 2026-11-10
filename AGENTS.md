@@ -111,7 +111,7 @@ Key installed packages:
 - **Lock/Idle**: swaylock, swayidle, hyprlock
 - **Notifications**: swaynotificationcenter (swaync)
 - **Shell**: fish (with plugins: done, fzf-fish, forgit, hydro, plugin-git, grc)
-- **Audio tools**: pavucontrol, pamixer, pw-volume, pwvucontrol
+- **Audio tools**: pavucontrol, pamixer, wpctl (WirePlumber), pwvucontrol
 - **Bluetooth**: bluez, bluez-tools, bluetuith
 - **YubiKey**: yubioath-flutter, opensc, yubico-piv-tool, yubikey-manager
 - **Niri tools**: niriswitcher, xwayland-satellite

@@ -11,7 +11,6 @@
   boot.initrd.availableKernelModules = [ "tpm_tis" "nvme" "xhci_pci" "thunderbolt" "usb_storage" "sd_mod" ];
   boot.initrd.kernelModules = [ "cryptd" ];
   boot.initrd.systemd = {
-    enable = true;
     tpm2.enable = true;
     emergencyAccess = true;    
   };
